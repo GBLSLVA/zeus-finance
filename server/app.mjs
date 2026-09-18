@@ -33,6 +33,31 @@ export class FinanceRepository {
     const result = await this.db.query('DELETE FROM entries WHERE user_id=? AND kind=? AND id=?', [user,kind,id]);
     if (!result.rowsAffected[0]) throw new HttpError(404, 'Registro não encontrado.');
   }
+  async listIncomes(user) {
+    return (await this.db.query('SELECT * FROM incomes WHERE user_id=? ORDER BY CASE type WHEN ? THEN 0 ELSE 1 END, received_at DESC, id DESC', [user, 'salary'])).recordset.map(row => ({
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      value: row.amount / 100,
+      receivedAt: row.received_at,
+    }));
+  }
+  async addIncome(user, data) {
+    const name = text(data.name);
+    const type = data.type === 'salary' || data.type === 'extra' ? data.type : null;
+    if (!type) throw new HttpError(400, 'Tipo de receita inválido.');
+    const amount = cents(data.value);
+    const fallbackDate = new Date().toISOString().slice(0, 10);
+    const date = typeof data.receivedAt === 'string' && data.receivedAt ? data.receivedAt : fallbackDate;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T12:00:00Z`))) throw new HttpError(400, 'Data inválida.');
+    const receivedAt = `${date} 12:00:00`;
+    const result = await this.db.query('INSERT INTO incomes(user_id,name,type,amount,received_at) VALUES(?,?,?,?,?) RETURNING id', [user, name, type, amount, receivedAt]);
+    return (await this.listIncomes(user)).find(row => row.id === result.recordset[0].id);
+  }
+  async removeIncome(user, id) {
+    const result = await this.db.query('DELETE FROM incomes WHERE user_id=? AND id=?', [user, id]);
+    if (!result.rowsAffected[0]) throw new HttpError(404, 'Receita não encontrada.');
+  }
 }
 
 export class AuthService {
@@ -109,6 +134,14 @@ export class FinanceApi {
       const user = await this.auth.authenticate(token);
       if (path === '/api/me' && req.method === 'GET') return send(200,(await this.repository.db.query('SELECT id,email FROM users WHERE id=?', [user])).recordset[0]);
       if (path === '/api/logout' && req.method === 'POST') { await this.auth.logout(token); return send(200,{}, {'Set-Cookie':`zeus_session=; HttpOnly; SameSite=Strict; Path=/api; Max-Age=0${secure}`}); }
+      const incomeRoute = /^\/api\/incomes(?:\/(\d+))?$/.exec(path);
+      if (incomeRoute) {
+        const id = incomeRoute[1];
+        if (req.method === 'GET' && !id) return send(200,await this.repository.listIncomes(user));
+        if (req.method === 'POST' && !id) return send(201,await this.repository.addIncome(user,await this.body(req)));
+        if (req.method === 'DELETE' && id) { await this.repository.removeIncome(user,Number(id)); return send(200,{}); }
+        throw new HttpError(405,'Método não permitido.');
+      }
       const route = /^\/api\/(transactions|goals|debts)(?:\/(\d+))?$/.exec(path);
       if (!route) throw new HttpError(404,'Rota não encontrada.');
       const [,kind,id] = route;

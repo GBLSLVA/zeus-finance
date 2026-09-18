@@ -1741,3 +1741,89 @@ tbody tr:hover td {
     animation-iteration-count: 1 !important;
   }
 }
+
+
+/* Income management */
+
+.income-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+  background: #0f1419;
+}
+
+.income-summary-strip > div {
+  min-width: 0;
+  padding: 16px 20px;
+}
+
+.income-summary-strip > div + div {
+  border-left: 1px solid var(--line);
+}
+
+.income-summary-strip span,
+.income-summary-strip strong {
+  display: block;
+}
+
+.income-summary-strip span {
+  color: var(--subtle);
+  font-size: 10px;
+  font-weight: 680;
+}
+
+.income-summary-strip strong {
+  margin-top: 5px;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.2;
+  font-weight: 740;
+  font-variant-numeric: tabular-nums;
+}
+
+.record-icon--incomes {
+  background: rgba(88, 214, 163, 0.1);
+  color: var(--accent);
+}
+
+.income-type {
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.income-type--salary {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.income-type--extra {
+  background: rgba(124, 168, 255, 0.1);
+  color: var(--blue);
+}
+
+.income-date {
+  display: block;
+  margin-top: 5px;
+  color: var(--subtle);
+  font-size: 9px;
+}
+
+.metric-card--warning > strong {
+  color: #fff2cb;
+}
+
+@media (max-width: 700px) {
+  .income-summary-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .income-summary-strip > div + div {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+}
