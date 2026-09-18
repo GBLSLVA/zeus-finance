@@ -14,6 +14,8 @@ Funcionalidades principais:
 - Rendas extras por data de recebimento.
 - Gastos com data financeira própria, independente da data de cadastro.
 - Dashboard com receita mensal, salário, extras, gastos, saldo estimado, dívida total e metas.
+- Dívidas estruturadas com credor, valor original, saldo atual, juros, parcelas, vencimento e status.
+- Pagamentos parciais de dívidas com histórico, baixa automática do saldo e atualização das parcelas pagas.
 - Distribuição de gastos por categoria.
 - Isolamento dos dados por usuário autenticado.
 - Banco SQLite local com migrations versionadas.
@@ -39,7 +41,9 @@ Funcionalidades principais:
 - **Renda extra:** considerada apenas no mês da data de recebimento.
 - **Gastos:** considerados pelo campo de data financeira do lançamento.
 - **Saldo mensal:** receitas do mês menos gastos do mês.
-- **Dívida total:** soma dos valores de todas as dívidas cadastradas.
+- **Dívida total:** soma do saldo atual das dívidas estruturadas.
+- **Pagamento de dívida:** reduz o saldo atual e pode contar como parcela paga; excluir um pagamento recalcula saldo e parcelas.
+- **Status da dívida:** muda automaticamente para `paid` quando o saldo chega a zero.
 - **Metas:** progresso calculado pelo valor reservado em relação ao valor alvo.
 
 ## Banco e migrations
@@ -54,7 +58,8 @@ Migrações atuais:
 
 1. esquema inicial;
 2. datas financeiras e auditoria básica em lançamentos;
-3. recorrência, vigência e status de receitas.
+3. recorrência, vigência e status de receitas;
+4. dívidas estruturadas e histórico de pagamentos, com migração automática das dívidas antigas.
 
 Bases criadas por versões anteriores são atualizadas automaticamente ao iniciar o servidor.
 
@@ -154,7 +159,6 @@ Valores financeiros são armazenados em centavos inteiros.
 
 Prioridades seguintes:
 
-- modelo completo de dívidas com saldo atual, parcelas, vencimento e pagamentos;
 - orçamento mensal por categoria;
 - movimentações de metas;
 - histórico por mês;
