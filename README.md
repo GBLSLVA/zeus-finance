@@ -1,26 +1,28 @@
 # ZEUS Finance
 
-Painel responsivo para monitoramento financeiro pessoal, com foco em gastos, dívidas, metas e análise do orçamento. A interface funciona em celular e desktop.
+Painel financeiro responsivo construído com React, TypeScript e Vite para acompanhar gastos, dívidas e metas em celular e desktop.
 
-## O que existe nesta primeira versão
+## Stack
 
-- Visão geral com saldo, gastos do mês, dívidas abertas e taxa de economia.
-- Gráfico visual de gastos por categoria.
-- Lista de contas próximas do vencimento.
-- Cadastro de gastos simulados.
-- Plano de dívidas com indicação da próxima ação.
-- Metas financeiras com progresso.
-- Layout responsivo com navegação adaptada para telas menores.
+- React 18 com componentes reutilizáveis
+- TypeScript em modo strict
+- Vite para desenvolvimento e build rápido
+- CSS responsivo com design system próprio
+- Persistência local encapsulada em repositórios orientados a objetos
 
-## Como testar
+## Arquitetura
 
-Abra o arquivo index.html em um navegador. Não há dependências ou etapa de build nesta versão.
+- src/domain.ts: entidades Transaction e Goal, FinanceRepository para persistência e FinanceAnalyzer para regras de análise.
+- src/App.tsx: composição das telas e fluxo de interação.
+- src/styles.css: tema visual e breakpoints para mobile, tablet e desktop.
 
-Os lançamentos adicionados ficam salvos no armazenamento local do navegador para continuar disponíveis no mesmo dispositivo. Isso não é uma conta nem uma sincronização segura: não use dados reais até adicionarmos autenticação, criptografia, banco de dados e cópias de segurança.
+## Como executar
 
-## Direção do produto
+    npm install
+    npm run dev
+    npm run build
 
-O ZEUS Finance será desenvolvido em camadas: primeiro a experiência de acompanhamento, depois contas de usuário, dados persistentes, categorização de transações, análise de dívidas, alertas e sincronização entre dispositivos.
+Os dados desta versão ficam apenas no armazenamento local do navegador. Para dados reais, a próxima etapa é adicionar autenticação, API, banco de dados, criptografia e sincronização entre dispositivos.
 
 ## Autor
 
