@@ -38,7 +38,17 @@ Tecnólogo em Análise e Desenvolvimento de Sistemas — Universidade Paulista (
 
 ## Executar
 
-Na pasta do projeto, execute npm install e depois npm start. Abra http://localhost:5173 e crie uma conta com senha de pelo menos 12 caracteres. O banco é criado automaticamente em data/zeus.sqlite.
+Na pasta do projeto, execute `npm install` e depois `npm start`. No computador, abra `http://localhost:5173`. O terminal também mostra um endereço de rede local, por exemplo `http://192.168.0.10:5173`, que pode ser aberto no celular quando os dois dispositivos estiverem na mesma rede Wi-Fi. Crie uma conta com senha de pelo menos 12 caracteres. O banco é criado automaticamente em `data/zeus.sqlite`.
+
+### Acessar pelo celular
+
+1. Conecte o computador e o celular à mesma rede Wi-Fi.
+2. Execute `npm start` no computador.
+3. No terminal, procure a linha iniciada por `Celular:`.
+4. Digite esse endereço no navegador do celular.
+5. Se o Windows exibir um alerta de firewall para o Node.js, permita o acesso em **redes privadas**.
+
+O servidor usa validação de mesma origem: a interface e a API continuam protegidas contra requisições vindas de origens externas não autorizadas.
 
 ## Decisões de arquitetura
 
