@@ -1,71 +1,169 @@
 # ZEUS Finance
 
-**Do registro de gastos ao acompanhamento de metas: uma aplicação full stack de finanças pessoais.**
+Aplicação full stack de finanças pessoais para acompanhar receitas, gastos, dívidas e metas em um único painel.
 
-![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
-![Node.js](https://img.shields.io/badge/Node.js-24-339933?logo=nodedotjs&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-persist%C3%AAncia-003B57?logo=sqlite&logoColor=white)
+## Estado atual
 
-Projeto de portfólio de [Gabriel Silva](https://github.com/GBLSLVA), Tecnólogo em Análise e Desenvolvimento de Sistemas pela UNIP, com interface responsiva, API Node.js e persistência no servidor. **Versão atual: MVP executável localmente.**
+Versão em evolução para **ZEUS 1.1**.
 
-## Funcionalidades implementadas
+Funcionalidades principais:
 
 - Cadastro, login e logout com sessão por cookie.
-- Cadastro, listagem e exclusão de gastos, dívidas e metas.
-- Separação dos registros por usuário autenticado.
-- Painel calculado a partir dos registros, com distribuição de gastos por categoria.
-- Banco SQLite criado automaticamente, sem instalar um servidor de banco.
-- Prévia da interface e API com um único comando.
+- Cadastro, edição, listagem e exclusão de gastos, dívidas, metas e receitas.
+- Salários recorrentes com período de vigência e status ativo/inativo.
+- Rendas extras por data de recebimento.
+- Gastos com data financeira própria, independente da data de cadastro.
+- Dashboard com receita mensal, salário, extras, gastos, saldo estimado, dívida total e metas.
+- Distribuição de gastos por categoria.
+- Isolamento dos dados por usuário autenticado.
+- Banco SQLite local com migrations versionadas.
+- Interface responsiva para desktop e celular.
+- CI com testes de API, migrations e build.
 
-## Tecnologias e ferramentas utilizadas
+## Tecnologias
 
-| Camada | Tecnologias | Aplicação |
-| --- | --- | --- |
-| Interface | React 18, React DOM, TypeScript, TSX | Componentes, formulários e tipagem estrita |
-| Visual | HTML5, CSS3, Grid, Flexbox, media queries | Layout responsivo e tema visual |
-| Servidor | Node.js 24, JavaScript ES Modules, node:http | API HTTP e serviços orientados a objetos |
-| Banco | SQLite, SQL, node:sqlite | Persistência, restrições e consultas parametrizadas |
-| Autenticação | node:crypto, scrypt, SHA-256, cookies HttpOnly/SameSite | Hash de senhas e tokens de sessão |
-| Desenvolvimento | Vite, plugin React, npm, package-lock.json | Servidor de desenvolvimento e dependências |
-| Prévia local | Rollup, plugins CommonJS/Node Resolve, TypeScript | Compilação no processo Node |
-| Testes | node:test, node:assert/strict | Integração HTTP com banco temporário real |
-| Ferramentas | VS Code, Git e GitHub | Edição, histórico e documentação |
+| Camada | Tecnologias |
+| --- | --- |
+| Interface | React 18, TypeScript, TSX |
+| Visual | HTML5, CSS3, Grid, Flexbox, media queries |
+| Servidor | Node.js 24, ES Modules, node:http |
+| Banco | SQLite, SQL, node:sqlite |
+| Segurança | scrypt, SHA-256, cookies HttpOnly/SameSite |
+| Build | Vite, Rollup |
+| Testes | node:test, node:assert/strict |
+| CI | GitHub Actions |
 
-## Formação relacionada
+## Regras financeiras atuais
 
-Tecnólogo em Análise e Desenvolvimento de Sistemas — Universidade Paulista (UNIP), concluído em 2025, com colação em janeiro de 2026 e diploma registrado em março de 2026.
+- **Salário:** receita recorrente mensal durante o período entre `active_from` e `active_until`, desde que esteja ativa.
+- **Renda extra:** considerada apenas no mês da data de recebimento.
+- **Gastos:** considerados pelo campo de data financeira do lançamento.
+- **Saldo mensal:** receitas do mês menos gastos do mês.
+- **Dívida total:** soma dos valores de todas as dívidas cadastradas.
+- **Metas:** progresso calculado pelo valor reservado em relação ao valor alvo.
+
+## Banco e migrations
+
+O banco é criado automaticamente em:
+
+`data/zeus.sqlite`
+
+O sistema mantém a tabela `schema_migrations` e aplica alterações de estrutura de forma incremental.
+
+Migrações atuais:
+
+1. esquema inicial;
+2. datas financeiras e auditoria básica em lançamentos;
+3. recorrência, vigência e status de receitas.
+
+Bases criadas por versões anteriores são atualizadas automaticamente ao iniciar o servidor.
 
 ## Executar
 
-Na pasta do projeto, execute `npm install` e depois `npm start`. No computador, abra `http://localhost:5173`. O terminal também mostra um endereço de rede local, por exemplo `http://192.168.0.10:5173`, que pode ser aberto no celular quando os dois dispositivos estiverem na mesma rede Wi-Fi. Crie uma conta com senha de pelo menos 12 caracteres. O banco é criado automaticamente em `data/zeus.sqlite`.
+Requisitos:
 
-### Acessar pelo celular
+- Node.js 24 ou superior;
+- npm;
+- Git, se for atualizar pelo repositório.
 
-1. Conecte o computador e o celular à mesma rede Wi-Fi.
-2. Execute `npm start` no computador.
-3. No terminal, procure a linha iniciada por `Celular:`.
-4. Digite esse endereço no navegador do celular.
-5. Se o Windows exibir um alerta de firewall para o Node.js, permita o acesso em **redes privadas**.
+Instale as dependências:
 
-O servidor usa validação de mesma origem: a interface e a API continuam protegidas contra requisições vindas de origens externas não autorizadas.
+`npm install`
 
-## Decisões de arquitetura
+Inicie interface e API no mesmo processo:
 
-- SqliteDatabase encapsula conexão, criação do esquema e consultas parametrizadas.
-- FinanceRepository persiste gastos, dívidas e metas; toda consulta exige o usuário autenticado.
-- AuthService usa hash scrypt com sal aleatório, sessões com expiração e limite de tentativas.
-- FinanceApi valida requisições e usa cookies HttpOnly/SameSite.
-- Valores financeiros são armazenados como centavos inteiros.
+`npm start`
 
-## Verificar
+No computador:
 
-npm test testa a API com SQLite temporário: login, isolamento entre contas, valores inválidos, persistência, exclusão e logout.
+`http://localhost:5173`
 
-## Próximos passos
+## Acesso pelo celular
 
-Recuperação de senha, edição de registros, receitas, filtros por período, deploy da API com HTTPS e sincronização entre dispositivos.
+1. Conecte computador e celular à mesma rede Wi-Fi.
+2. Execute `iniciar-zeus-mobile.bat` ou `npm start`.
+3. O terminal exibirá um endereço semelhante a:
+
+`http://192.168.0.10:5173`
+
+4. Abra esse endereço no navegador do celular.
+
+O launcher Windows libera somente a porta TCP 5173 no perfil de rede privada.
+
+## Desenvolvimento separado
+
+Frontend Vite:
+
+`npm run dev`
+
+API:
+
+`npm run server`
+
+O Vite encaminha `/api` para a API local.
+
+## Testes
+
+Execute:
+
+`npm test`
+
+A suíte cobre atualmente:
+
+- autenticação;
+- isolamento de usuários;
+- criação, edição e exclusão de registros;
+- validação de valores e datas;
+- receitas recorrentes e extras;
+- persistência;
+- proteção de origem;
+- migração de uma base antiga sem perda dos registros principais.
+
+## Build
+
+`npm run build`
+
+## CI/CD
+
+O workflow em `.github/workflows/ci.yml` executa em pushes e pull requests para `main`:
+
+1. checkout;
+2. Node.js 24;
+3. `npm ci`;
+4. `npm test`;
+5. `npm run build`;
+6. upload do diretório `dist/`.
+
+## Arquitetura atual
+
+Fluxo principal:
+
+`React -> ApiClient -> FinanceApi -> FinanceRepository -> SqliteDatabase -> SQLite`
+
+Responsabilidades:
+
+- **ApiClient:** chamadas HTTP da interface.
+- **FinanceApi:** autenticação, roteamento, validação de origem e respostas HTTP.
+- **FinanceRepository:** regras de persistência de registros e receitas.
+- **AuthService:** login, sessões e proteção contra tentativas excessivas.
+- **SqliteDatabase:** conexão SQLite, queries e migrations.
+
+Valores financeiros são armazenados em centavos inteiros.
+
+## Próximos passos planejados
+
+Prioridades seguintes:
+
+- modelo completo de dívidas com saldo atual, parcelas, vencimento e pagamentos;
+- orçamento mensal por categoria;
+- movimentações de metas;
+- histórico por mês;
+- gastos recorrentes;
+- categorias personalizadas;
+- exportação CSV/PDF;
+- backup e restauração;
+- PWA e deploy HTTPS.
 
 ## Autor
 
-[Gabriel Silva — GBLSLVA](https://github.com/GBLSLVA)
+Gabriel Silva — GBLSLVA
