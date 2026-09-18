@@ -1827,3 +1827,43 @@ tbody tr:hover td {
     border-left: 0;
   }
 }
+
+
+/* ZEUS 1.1 — editing and financial dates */
+
+.table-actions {
+  display: inline-flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.form-actions {
+  display: grid;
+  gap: 9px;
+}
+
+.check-field {
+  grid-template-columns: 18px 1fr !important;
+  align-items: center;
+  gap: 10px !important;
+  min-height: 38px;
+}
+
+.check-field input {
+  width: 18px !important;
+  min-height: 18px !important;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+  box-shadow: none !important;
+}
+
+.check-field span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.record-form-panel input[type="date"] {
+  color-scheme: dark;
+}
