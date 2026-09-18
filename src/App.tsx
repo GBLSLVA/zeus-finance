@@ -3,6 +3,7 @@ import { api } from './api'
 
 type Kind = 'transactions' | 'debts' | 'goals'
 type View = Kind | 'incomes' | 'budgets' | 'overview'
+type Category = 'Casa' | 'Comida' | 'Transporte' | 'Lazer' | 'Outros'
 type Entry = {
   id: number
   name: string
@@ -37,7 +38,7 @@ type DebtPayment = {
 type Budget = {
   id: number
   month: string
-  category: (typeof categories)[number]
+  category: Category
   limit: number
   createdAt: string
   updatedAt: string
@@ -78,9 +79,9 @@ const descriptions: Record<View, string> = {
   goals: 'Transforme objetivos em progresso visível.',
 }
 
-const categories = ['Casa', 'Comida', 'Transporte', 'Lazer', 'Outros'] as const
+const categories: readonly Category[] = ['Casa', 'Comida', 'Transporte', 'Lazer', 'Outros']
 
-const categoryColor: Record<(typeof categories)[number], string> = {
+const categoryColor: Record<Category, string> = {
   Casa: '#58d6a3',
   Comida: '#7ca8ff',
   Transporte: '#f1c96b',
@@ -357,7 +358,7 @@ export function App() {
     setError('')
   }
 
-  async function saveBudget(event: FormEvent<HTMLFormElement>, category: (typeof categories)[number]) {
+  async function saveBudget(event: FormEvent<HTMLFormElement>, category: Category) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     setBusy(true)
@@ -764,7 +765,21 @@ export function App() {
           )}
         </header>
 
-        {error && <p role="alert" className="alert alert--error">{error}</p>}
+        {(view === 'overview' || view === 'budgets') && (
+          <div className="period-toolbar" aria-label="Selecionar período">
+            <button className="period-button" onClick={() => setSelectedMonth(current => shiftMonthKey(current, -1))} aria-label="Mês anterior">‹</button>
+            <div className="period-toolbar__current">
+              <Icon name="calendar" size={16} />
+              <strong>{monthLabel}</strong>
+            </div>
+            <button className="period-button" onClick={() => setSelectedMonth(current => shiftMonthKey(current, 1))} aria-label="Próximo mês">›</button>
+            {selectedMonth !== currentMonthKey() && (
+              <button className="period-today" onClick={() => setSelectedMonth(currentMonthKey())}>Mês atual</button>
+            )}
+          </div>
+        )}
+
+        {error && <p role="alert" className="alert alert--error">{error}</p>
 
         {view === 'overview' ? (
           <div className="dashboard">
@@ -772,7 +787,7 @@ export function App() {
               <div className="dashboard-hero__main">
                 <div className="hero-icon"><Icon name="income" size={22} /></div>
                 <div>
-                  <span>Receita total deste mês</span>
+                  <span>Receita total do período</span>
                   <strong>{money(dashboard.income)}</strong>
                   <p>{dashboard.income > 0 ? `Salário + ${dashboard.monthlyExtras.length} receita${dashboard.monthlyExtras.length === 1 ? '' : 's'} extra${dashboard.monthlyExtras.length === 1 ? '' : 's'} em ${monthLabel.toLowerCase()}` : 'Cadastre seu salário e suas receitas extras'}</p>
                 </div>
@@ -783,7 +798,7 @@ export function App() {
                   <strong>{money(dashboard.salary)}</strong>
                 </div>
                 <div>
-                  <span>Extras do mês</span>
+                  <span>Extras do período</span>
                   <strong>{money(dashboard.extras)}</strong>
                 </div>
               </div>
@@ -798,7 +813,7 @@ export function App() {
                 tone={dashboard.balance >= 0 ? 'accent' : 'warning'}
               />
               <MetricCard
-                label="Gastos neste mês"
+                label="Gastos no período"
                 value={money(dashboard.spent)}
                 detail={dashboard.monthly.length ? `${dashboard.monthly.length} lançamento${dashboard.monthly.length === 1 ? '' : 's'} registrado${dashboard.monthly.length === 1 ? '' : 's'}` : 'Nenhum gasto no mês'}
                 icon="wallet"
@@ -864,6 +879,64 @@ export function App() {
                           </div>
                         ))}
                     </div>
+                  </div>
+                )}
+              </article>
+
+              <article className="panel budget-panel">
+                <div className="panel__header">
+                  <div>
+                    <span className="panel__eyebrow">PLANEJAMENTO</span>
+                    <h2>Orçamento mensal</h2>
+                  </div>
+                  <button className="link-button" onClick={() => navigate('budgets')}>
+                    Ajustar limites <Icon name="arrow" size={16} />
+                  </button>
+                </div>
+
+                {dashboard.budgetTotal > 0 ? (
+                  <div className="budget-overview">
+                    <div className="budget-overview__summary">
+                      <div>
+                        <span>Limites definidos</span>
+                        <strong>{money(dashboard.budgetTotal)}</strong>
+                      </div>
+                      <div>
+                        <span>Gasto nas categorias orçadas</span>
+                        <strong>{money(dashboard.budgetedSpent)}</strong>
+                      </div>
+                      <div>
+                        <span>Disponível</span>
+                        <strong className={dashboard.budgetRemaining < 0 ? 'negative-value' : ''}>{money(dashboard.budgetRemaining)}</strong>
+                      </div>
+                    </div>
+                    <div className="progress-track budget-total-progress">
+                      <span style={{ width: percent(dashboard.budgetUsage) }} />
+                    </div>
+                    <div className="budget-overview__footer">
+                      <span>{percent(dashboard.budgetUsage)} dos limites consumidos</span>
+                      {dashboard.budgetRemaining < 0 && <strong>Excedido em {money(Math.abs(dashboard.budgetRemaining))}</strong>}
+                    </div>
+
+                    <div className="budget-mini-list">
+                      {dashboard.budgetData.filter(item => item.limit > 0).map(item => (
+                        <div className="budget-mini-row" key={item.category}>
+                          <span className="category-dot" style={{ background: categoryColor[item.category] }} />
+                          <div>
+                            <strong>{item.category}</strong>
+                            <span>{money(item.spent)} de {money(item.limit)}</span>
+                          </div>
+                          <strong className={item.remaining < 0 ? 'negative-value' : ''}>{percent(item.usage)}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mini-empty mini-empty--tall">
+                    <div className="empty-block__icon"><Icon name="budget" size={21} /></div>
+                    <strong>Nenhum limite definido para {monthLabel.toLowerCase()}.</strong>
+                    <span>Defina quanto pretende gastar em cada categoria.</span>
+                    <button className="secondary-button" onClick={() => navigate('budgets')}>Criar orçamento</button>
                   </div>
                 )}
               </article>
@@ -958,6 +1031,110 @@ export function App() {
                   </div>
                 )}
               </article>
+            </section>
+            <section className="panel history-panel">
+              <div className="panel__header">
+                <div>
+                  <span className="panel__eyebrow">HISTÓRICO</span>
+                  <h2>Últimos 6 meses até {monthLabel.toLowerCase()}</h2>
+                </div>
+                <span className="period-chip"><Icon name="calendar" size={15} /> 6 meses</span>
+              </div>
+              <div className="history-list">
+                {historyData.map(item => (
+                  <div className="history-row" key={item.monthKey}>
+                    <div className="history-row__month">
+                      <strong>{formatMonth(item.monthKey).split(' de ')[0]}</strong>
+                      <span>{item.monthKey.slice(0, 4)}</span>
+                    </div>
+                    <div className="history-bars">
+                      <div className="history-bar history-bar--income" title={`Receitas: ${money(item.income)}`}>
+                        <span style={{ width: `${(item.income / historyMax) * 100}%` }} />
+                      </div>
+                      <div className="history-bar history-bar--expense" title={`Gastos: ${money(item.expenses)}`}>
+                        <span style={{ width: `${(item.expenses / historyMax) * 100}%` }} />
+                      </div>
+                    </div>
+                    <div className="history-row__values">
+                      <span>{money(item.income)} entrada</span>
+                      <span>{money(item.expenses)} saída</span>
+                    </div>
+                    <strong className={item.balance < 0 ? 'negative-value' : 'positive-value'}>{money(item.balance)}</strong>
+                  </div>
+                ))}
+              </div>
+              <div className="history-legend">
+                <span><i className="history-legend__income" /> Receitas</span>
+                <span><i className="history-legend__expense" /> Gastos</span>
+                <span>Valor à direita = saldo do mês</span>
+              </div>
+            </section>
+          </div>
+        ) : view === 'budgets' ? (
+          <div className="budget-page">
+            <section className="budget-summary-grid">
+              <MetricCard
+                label="Orçamento definido"
+                value={money(dashboard.budgetTotal)}
+                detail={dashboard.budgetTotal > 0 ? `${budgets.length} categoria${budgets.length === 1 ? '' : 's'} com limite` : 'Nenhum limite definido neste mês'}
+                icon="budget"
+              />
+              <MetricCard
+                label="Consumido"
+                value={money(dashboard.budgetedSpent)}
+                detail={dashboard.budgetTotal > 0 ? `${percent(dashboard.budgetUsage)} dos limites definidos` : 'Defina limites para acompanhar o uso'}
+                icon="wallet"
+                tone={dashboard.budgetUsage > 100 ? 'warning' : 'default'}
+              />
+              <MetricCard
+                label="Disponível"
+                value={money(dashboard.budgetRemaining)}
+                detail={dashboard.budgetRemaining < 0 ? `Orçamento excedido em ${money(Math.abs(dashboard.budgetRemaining))}` : 'Quanto ainda resta nas categorias orçadas'}
+                icon="income"
+                tone={dashboard.budgetRemaining < 0 ? 'warning' : 'accent'}
+              />
+            </section>
+
+            <section className="budget-category-grid">
+              {dashboard.budgetData.map(item => (
+                <article className={`panel budget-category-card ${item.remaining < 0 ? 'budget-category-card--over' : ''}`} key={item.category}>
+                  <div className="budget-category-card__header">
+                    <div>
+                      <span className="category-dot" style={{ background: categoryColor[item.category] }} />
+                      <div>
+                        <strong>{item.category}</strong>
+                        <span>{item.budget ? 'Limite configurado' : 'Sem limite para este mês'}</span>
+                      </div>
+                    </div>
+                    {item.budget && <button className="icon-action icon-action--danger" onClick={() => removeBudget(item.budget!.id)} aria-label={`Remover orçamento de ${item.category}`}><Icon name="trash" size={16} /></button>}
+                  </div>
+
+                  <div className="budget-category-card__numbers">
+                    <div><span>Gasto</span><strong>{money(item.spent)}</strong></div>
+                    <div><span>Limite</span><strong>{item.limit > 0 ? money(item.limit) : '—'}</strong></div>
+                    <div><span>Restante</span><strong className={item.remaining < 0 ? 'negative-value' : ''}>{item.limit > 0 ? money(item.remaining) : '—'}</strong></div>
+                  </div>
+
+                  <div className="progress-track budget-category-progress">
+                    <span style={{ width: item.limit > 0 ? percent(item.usage) : '0%' }} />
+                  </div>
+                  <div className="budget-category-card__usage">
+                    <span>{item.limit > 0 ? `${percent(item.usage)} utilizado` : 'Defina um limite abaixo'}</span>
+                    {item.remaining < 0 && <strong>Excedido</strong>}
+                  </div>
+
+                  <form className="budget-inline-form" onSubmit={event => saveBudget(event, item.category)}>
+                    <label>
+                      <span>Limite para {monthLabel.toLowerCase()}</span>
+                      <div className="money-input">
+                        <span>R$</span>
+                        <input name="limit" type="number" min="0.01" max="100000000" step="0.01" defaultValue={item.limit || undefined} placeholder="0,00" required />
+                      </div>
+                    </label>
+                    <button className="primary" disabled={busy}>{item.budget ? 'Atualizar' : 'Definir limite'}</button>
+                  </form>
+                </article>
+              ))}
             </section>
           </div>
         ) : view === 'debts' ? (
