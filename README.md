@@ -16,7 +16,7 @@ Painel responsivo para monitoramento financeiro pessoal, com foco em gastos, dí
 
 Abra o arquivo index.html em um navegador. Não há dependências ou etapa de build nesta versão.
 
-Os dados dos formulários são demonstrativos e permanecem apenas na tela atual. A próxima etapa é adicionar autenticação, persistência segura, importação de extratos, regras de análise e um banco de dados.
+Os lançamentos adicionados ficam salvos no armazenamento local do navegador para continuar disponíveis no mesmo dispositivo. Isso não é uma conta nem uma sincronização segura: não use dados reais até adicionarmos autenticação, criptografia, banco de dados e cópias de segurança.
 
 ## Direção do produto
 
