@@ -26,6 +26,14 @@ const dateOnly = (value, {optional = false} = {}) => {
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const today = () => new Date().toISOString().slice(0, 10);
+const categories = ['Casa','Comida','Transporte','Lazer','Outros'];
+
+const monthOnly = value => {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}$/.test(value)) throw new HttpError(400, 'Mês inválido.');
+  const [year, month] = value.split('-').map(Number);
+  if (year < 2000 || year > 2200 || month < 1 || month > 12) throw new HttpError(400, 'Mês inválido.');
+  return value;
+};
 
 const normalizeEntry = row => ({
   id: row.id,
@@ -83,6 +91,15 @@ const normalizeDebtPayment = row => ({
   createdAt: row.created_at,
 });
 
+const normalizeBudget = row => ({
+  id: row.id,
+  month: row.month,
+  category: row.category,
+  limit: row.limit_amount / 100,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
 export class FinanceRepository {
   constructor(database) { this.db = database; }
 
@@ -100,7 +117,7 @@ export class FinanceRepository {
     const name = text(data.name);
     const amount = cents(kind === 'goals' ? data.target : data.value);
     const category = kind === 'transactions' ? text(data.category) : null;
-    if (category && !['Casa','Comida','Transporte','Lazer','Outros'].includes(category)) throw new HttpError(400, 'Categoria inválida.');
+    if (category && !categories.includes(category)) throw new HttpError(400, 'Categoria inválida.');
     const saved = kind === 'goals' ? cents(data.saved ?? 0, true) : 0;
     const transactionDate = kind === 'transactions' ? dateOnly(data.transactionDate ?? today()) : null;
     const result = await this.db.query(
@@ -115,7 +132,7 @@ export class FinanceRepository {
     const name = text(data.name);
     const amount = cents(kind === 'goals' ? data.target : data.value);
     const category = kind === 'transactions' ? text(data.category) : null;
-    if (category && !['Casa','Comida','Transporte','Lazer','Outros'].includes(category)) throw new HttpError(400, 'Categoria inválida.');
+    if (category && !categories.includes(category)) throw new HttpError(400, 'Categoria inválida.');
     const saved = kind === 'goals' ? cents(data.saved ?? 0, true) : 0;
     const transactionDate = kind === 'transactions' ? dateOnly(data.transactionDate ?? today()) : null;
     const result = await this.db.query(
@@ -237,6 +254,37 @@ export class FinanceRepository {
     const result = await this.db.query('DELETE FROM debt_payments WHERE user_id=? AND debt_id=? AND id=?', [user,debtId,paymentId]);
     if (!result.rowsAffected[0]) throw new HttpError(404, 'Pagamento não encontrado.');
     return this.recalculateDebt(user,debtId);
+  }
+
+  async listBudgets(user, month) {
+    const result = await this.db.query(
+      'SELECT * FROM budgets WHERE user_id=? AND month=? ORDER BY category,id',
+      [user, monthOnly(month)],
+    );
+    return result.recordset.map(normalizeBudget);
+  }
+
+  async upsertBudget(user, data) {
+    const month = monthOnly(data.month);
+    const category = text(data.category);
+    if (!categories.includes(category)) throw new HttpError(400, 'Categoria inválida.');
+    const limit = cents(data.limit);
+    const result = await this.db.query(
+      `INSERT INTO budgets(user_id,month,category,limit_amount,updated_at)
+       VALUES(?,?,?,?,CURRENT_TIMESTAMP)
+       ON CONFLICT(user_id,month,category)
+       DO UPDATE SET limit_amount=excluded.limit_amount,updated_at=CURRENT_TIMESTAMP
+       RETURNING id`,
+      [user, month, category, limit],
+    );
+    const budgets = await this.listBudgets(user, month);
+    return budgets.find(row => row.id === result.recordset[0].id)
+      ?? budgets.find(row => row.category === category);
+  }
+
+  async removeBudget(user, id) {
+    const result = await this.db.query('DELETE FROM budgets WHERE user_id=? AND id=?', [user,id]);
+    if (!result.rowsAffected[0]) throw new HttpError(404, 'Orçamento não encontrado.');
   }
 
   async listIncomes(user) {
@@ -391,7 +439,8 @@ export class FinanceApi {
 
     try {
       if (!this.isOriginAllowed(req)) throw new HttpError(403,'Origem não permitida.');
-      const path = new URL(req.url, 'http://localhost').pathname;
+      const url = new URL(req.url, 'http://localhost');
+      const path = url.pathname;
       if (path === '/api/health' && req.method === 'GET') return send(200,{status:'ok'});
 
       const token = /(?:^|;\s*)zeus_session=([a-f0-9]+)/.exec(req.headers.cookie ?? '')?.[1];
@@ -407,6 +456,18 @@ export class FinanceApi {
       if (path === '/api/logout' && req.method === 'POST') {
         await this.auth.logout(token);
         return send(200,{}, {'Set-Cookie':`zeus_session=; HttpOnly; SameSite=Strict; Path=/api; Max-Age=0${secure}`});
+      }
+
+      if (path === '/api/budgets') {
+        if (req.method === 'GET') return send(200,await this.repository.listBudgets(user,url.searchParams.get('month')));
+        if (req.method === 'POST') return send(200,await this.repository.upsertBudget(user,await this.body(req)));
+        throw new HttpError(405,'Método não permitido.');
+      }
+
+      const budgetRoute = /^\/api\/budgets\/(\d+)$/.exec(path);
+      if (budgetRoute) {
+        if (req.method === 'DELETE') { await this.repository.removeBudget(user,Number(budgetRoute[1])); return send(200,{}); }
+        throw new HttpError(405,'Método não permitido.');
       }
 
       const incomeRoute = /^\/api\/incomes(?:\/(\d+))?$/.exec(path);
