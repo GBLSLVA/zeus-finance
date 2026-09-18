@@ -14,6 +14,26 @@ type Entry = {
   createdAt: string
   updatedAt: string
 }
+type Debt = Entry & {
+  originalAmount: number
+  currentBalance: number
+  paidAmount: number
+  creditor: string
+  interestRate: number
+  installmentsTotal: number
+  installmentsPaid: number
+  dueDay: number | null
+  status: 'active' | 'paid'
+}
+type DebtPayment = {
+  id: number
+  debtId: number
+  amount: number
+  paymentDate: string
+  note: string
+  countsAsInstallment: boolean
+  createdAt: string
+}
 type Income = {
   id: number
   name: string
@@ -136,11 +156,13 @@ export function App() {
   })
   const [incomes, setIncomes] = useState<Income[]>([])
   const [editing, setEditing] = useState<EditState>(null)
+  const [selectedDebtId, setSelectedDebtId] = useState<number | null>(null)
+  const [debtPayments, setDebtPayments] = useState<DebtPayment[]>([])
 
   const load = async () => {
     const [transactions, debts, goals, incomeEntries] = await Promise.all([
       api.request<Entry[]>('transactions'),
-      api.request<Entry[]>('debts'),
+      api.request<Debt[]>('debts'),
       api.request<Entry[]>('goals'),
       api.request<Income[]>('incomes'),
     ])
@@ -188,6 +210,8 @@ export function App() {
       setData({ transactions: [], debts: [], goals: [] })
       setIncomes([])
       setEditing(null)
+      setSelectedDebtId(null)
+      setDebtPayments([])
       setView('overview')
     } catch (e) {
       setError((e as Error).message)
@@ -225,6 +249,26 @@ export function App() {
             ? current.map(entry => entry.id === income.id ? income : entry)
             : [income, ...current],
         )
+      } else if (view === 'debts') {
+        const isEditing = editing?.kind === 'debts'
+        const debt = await api.request<Debt>(
+          isEditing ? `debts/${editing.entry.id}` : 'debts',
+          isEditing ? 'PUT' : 'POST',
+          {
+            name: form.get('name'),
+            creditor: form.get('creditor'),
+            originalAmount: Number(form.get('originalAmount')),
+            interestRate: Number(form.get('interestRate') ?? 0),
+            installmentsTotal: Number(form.get('installmentsTotal') ?? 0),
+            dueDay: form.get('dueDay') ? Number(form.get('dueDay')) : null,
+          },
+        )
+        setData(current => ({
+          ...current,
+          debts: isEditing
+            ? current.debts.map(item => item.id === debt.id ? debt : item)
+            : [debt, ...current.debts],
+        }))
       } else {
         const isEditing = editing?.kind === view
         const payload = {
@@ -270,7 +314,74 @@ export function App() {
 
   function cancelEdit() {
     setEditing(null)
+    if (next !== 'debts') {
+      setSelectedDebtId(null)
+      setDebtPayments([])
+    }
     setError('')
+  }
+
+  async function openDebtPayments(debtId: number) {
+    setBusy(true)
+    setError('')
+    try {
+      const payments = await api.request<DebtPayment[]>(`debts/${debtId}/payments`)
+      setSelectedDebtId(debtId)
+      setDebtPayments(payments)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addDebtPayment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedDebtId) return
+    const element = event.currentTarget
+    const form = new FormData(element)
+    setBusy(true)
+    setError('')
+    try {
+      const result = await api.request<{ payment: DebtPayment; debt: Debt }>(
+        `debts/${selectedDebtId}/payments`,
+        'POST',
+        {
+          amount: Number(form.get('amount')),
+          paymentDate: form.get('paymentDate'),
+          note: form.get('note'),
+          countsAsInstallment: form.get('countsAsInstallment') === 'on',
+        },
+      )
+      setDebtPayments(current => [result.payment, ...current])
+      setData(current => ({
+        ...current,
+        debts: current.debts.map(item => item.id === result.debt.id ? result.debt : item),
+      }))
+      element.reset()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeDebtPayment(paymentId: number) {
+    if (!selectedDebtId || !window.confirm('Excluir este pagamento? O saldo da dívida será recalculado.')) return
+    setBusy(true)
+    setError('')
+    try {
+      const debt = await api.request<Debt>(`debts/${selectedDebtId}/payments/${paymentId}`, 'DELETE')
+      setDebtPayments(current => current.filter(payment => payment.id !== paymentId))
+      setData(current => ({
+        ...current,
+        debts: current.debts.map(item => item.id === debt.id ? debt : item),
+      }))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function remove(kind: Kind | 'incomes', id: number) {
@@ -314,7 +425,11 @@ export function App() {
     const extras = monthlyExtras.reduce((total, entry) => total + entry.value, 0)
     const income = salary + extras
     const balance = income - spent
-    const debt = data.debts.reduce((total, entry) => total + entry.value, 0)
+    const debtEntries = data.debts as Debt[]
+    const debt = debtEntries.reduce((total, entry) => total + entry.currentBalance, 0)
+    const debtOriginal = debtEntries.reduce((total, entry) => total + entry.originalAmount, 0)
+    const debtPaid = debtEntries.reduce((total, entry) => total + entry.paidAmount, 0)
+    const debtProgress = debtOriginal > 0 ? (debtPaid / debtOriginal) * 100 : 0
     const debtMonths = income > 0 ? debt / income : 0
     const saved = data.goals.reduce((total, entry) => total + entry.saved, 0)
     const targets = data.goals.reduce((total, entry) => total + entry.target, 0)
@@ -340,6 +455,9 @@ export function App() {
       income,
       balance,
       debt,
+      debtOriginal,
+      debtPaid,
+      debtProgress,
       debtMonths,
       saved,
       targets,
@@ -631,24 +749,24 @@ export function App() {
                     <h2>Dívidas</h2>
                   </div>
                   <button className="link-button" onClick={() => navigate('debts')}>
-                    Ver todas <Icon name="arrow" size={16} />
+                    Gerenciar <Icon name="arrow" size={16} />
                   </button>
                 </div>
 
                 <div className="compact-list">
-                  {data.debts.slice(0, 4).map(entry => (
+                  {(data.debts as Debt[]).filter(entry => entry.status === 'active').slice(0, 4).map(entry => (
                     <div className="compact-row" key={entry.id}>
                       <span className="compact-row__icon compact-row__icon--debt"><Icon name="debt" size={17} /></span>
                       <div>
                         <strong>{entry.name}</strong>
-                        <span>Valor registrado</span>
+                        <span>{entry.installmentsTotal > 0 ? `${entry.installmentsPaid}/${entry.installmentsTotal} parcelas` : `${percent(entry.originalAmount > 0 ? (entry.paidAmount / entry.originalAmount) * 100 : 0)} quitado`}</span>
                       </div>
-                      <strong className="compact-row__value">{money(entry.value)}</strong>
+                      <strong className="compact-row__value">{money(entry.currentBalance)}</strong>
                     </div>
                   ))}
-                  {!data.debts.length && (
+                  {!(data.debts as Debt[]).some(entry => entry.status === 'active') && (
                     <div className="mini-empty">
-                      <span>Nenhuma dívida cadastrada.</span>
+                      <span>Nenhuma dívida ativa.</span>
                       <button className="link-button" onClick={() => navigate('debts')}>Adicionar dívida</button>
                     </div>
                   )}
@@ -656,7 +774,7 @@ export function App() {
 
                 {data.debts.length > 0 && (
                   <div className="panel-total">
-                    <span>Total registrado</span>
+                    <span>Saldo devedor • {percent(dashboard.debtProgress)} já quitado</span>
                     <strong>{money(dashboard.debt)}</strong>
                   </div>
                 )}
@@ -715,6 +833,144 @@ export function App() {
                 )}
               </article>
             </section>
+          </div>
+        ) : view === 'debts' ? (
+          <div className="debt-page">
+            <section className="debt-summary-grid" aria-label="Resumo das dívidas">
+              <article className="metric-card metric-card--warning">
+                <div className="metric-card__top"><span className="metric-card__label">Saldo devedor atual</span><span className="metric-card__icon"><Icon name="debt" size={18} /></span></div>
+                <strong>{money(dashboard.debt)}</strong>
+                <span className="metric-card__detail">{(data.debts as Debt[]).filter(debt => debt.status === 'active').length} dívida(s) ativa(s)</span>
+              </article>
+              <article className="metric-card">
+                <div className="metric-card__top"><span className="metric-card__label">Valor original</span><span className="metric-card__icon"><Icon name="debt" size={18} /></span></div>
+                <strong>{money(dashboard.debtOriginal)}</strong>
+                <span className="metric-card__detail">Soma dos valores originais cadastrados</span>
+              </article>
+              <article className="metric-card metric-card--accent">
+                <div className="metric-card__top"><span className="metric-card__label">Total já pago</span><span className="metric-card__icon"><Icon name="income" size={18} /></span></div>
+                <strong>{money(dashboard.debtPaid)}</strong>
+                <span className="metric-card__detail">{percent(dashboard.debtProgress)} das dívidas já foi quitado</span>
+              </article>
+            </section>
+
+            <div className="records-layout debt-records-layout">
+              <section className="panel records-panel debt-records-panel">
+                <div className="panel__header records-panel__header">
+                  <div>
+                    <span className="panel__eyebrow">COMPROMISSOS</span>
+                    <h2>Dívidas cadastradas</h2>
+                  </div>
+                  <span className="records-count">{data.debts.length} {data.debts.length === 1 ? 'item' : 'itens'}</span>
+                </div>
+
+                <div className="debt-card-list">
+                  {(data.debts as Debt[]).map(debt => {
+                    const progress = debt.originalAmount > 0 ? (debt.paidAmount / debt.originalAmount) * 100 : 0
+                    return (
+                      <article className={`debt-card ${debt.status === 'paid' ? 'debt-card--paid' : ''}`} key={debt.id}>
+                        <div className="debt-card__header">
+                          <div className="record-name">
+                            <span className="record-icon record-icon--debts"><Icon name="debt" size={17} /></span>
+                            <div>
+                              <strong>{debt.name}</strong>
+                              <span>{debt.creditor || 'Credor não informado'}{debt.dueDay ? ` • vence dia ${debt.dueDay}` : ''}</span>
+                            </div>
+                          </div>
+                          <span className={`debt-status debt-status--${debt.status}`}>{debt.status === 'paid' ? 'Quitada' : 'Ativa'}</span>
+                        </div>
+
+                        <div className="debt-card__values">
+                          <div><span>Original</span><strong>{money(debt.originalAmount)}</strong></div>
+                          <div><span>Já pago</span><strong>{money(debt.paidAmount)}</strong></div>
+                          <div><span>Saldo atual</span><strong>{money(debt.currentBalance)}</strong></div>
+                        </div>
+
+                        <div className="progress-track debt-progress"><span style={{ width: percent(progress) }} /></div>
+
+                        <div className="debt-card__meta">
+                          <span>{percent(progress)} quitado</span>
+                          <span>{debt.installmentsTotal > 0 ? `${debt.installmentsPaid}/${debt.installmentsTotal} parcelas` : 'Sem parcelamento informado'}</span>
+                          <span>{debt.interestRate > 0 ? `Juros: ${debt.interestRate.toLocaleString('pt-BR')}% a.m.` : 'Juros não informados'}</span>
+                        </div>
+
+                        <div className="debt-card__actions">
+                          <button className="secondary-button" onClick={() => openDebtPayments(debt.id)}>Pagamentos</button>
+                          <button className="icon-action" onClick={() => startEdit('debts', debt)} aria-label={`Editar ${debt.name}`}><Icon name="edit" size={17} /></button>
+                          <button className="icon-action icon-action--danger" onClick={() => remove('debts', debt.id)} aria-label={`Excluir ${debt.name}`}><Icon name="trash" size={17} /></button>
+                        </div>
+                      </article>
+                    )
+                  })}
+                  {!data.debts.length && (
+                    <div className="table-empty debt-empty">
+                      <div className="empty-block__icon"><Icon name="debt" size={22} /></div>
+                      <strong>Nenhuma dívida cadastrada.</strong>
+                      <span>Use o formulário ao lado para registrar seu primeiro compromisso.</span>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <aside className="panel record-form-panel">
+                <span className="panel__eyebrow">{editing?.kind === 'debts' ? 'EDITAR DÍVIDA' : 'NOVA DÍVIDA'}</span>
+                <h2>{editing?.kind === 'debts' ? 'Atualizar dívida' : 'Adicionar dívida'}</h2>
+                <p>Informe o valor original. O saldo atual será calculado automaticamente a partir dos pagamentos registrados.</p>
+                <form key={`debt-${editing?.kind === 'debts' ? editing.entry.id : 'new'}`} onSubmit={save}>
+                  <label><span>Descrição</span><input name="name" defaultValue={editing?.kind === 'debts' ? editing.entry.name : ''} placeholder="Ex.: Cartão, empréstimo, financiamento" required maxLength={120} /></label>
+                  <label><span>Credor</span><input name="creditor" defaultValue={editing?.kind === 'debts' ? (editing.entry as Debt).creditor : ''} placeholder="Ex.: Banco, loja, pessoa" maxLength={120} /></label>
+                  <label><span>Valor original</span><div className="money-input"><span>R$</span><input name="originalAmount" type="number" min="0.01" max="100000000" step="0.01" defaultValue={editing?.kind === 'debts' ? (editing.entry as Debt).originalAmount : undefined} placeholder="0,00" required /></div></label>
+                  <div className="form-grid-2">
+                    <label><span>Juros ao mês (%)</span><input name="interestRate" type="number" min="0" max="100" step="0.01" defaultValue={editing?.kind === 'debts' ? (editing.entry as Debt).interestRate : 0} /></label>
+                    <label><span>Dia de vencimento</span><input name="dueDay" type="number" min="1" max="31" defaultValue={editing?.kind === 'debts' ? (editing.entry as Debt).dueDay ?? undefined : undefined} placeholder="10" /></label>
+                  </div>
+                  <label><span>Total de parcelas</span><input name="installmentsTotal" type="number" min="0" max="600" step="1" defaultValue={editing?.kind === 'debts' ? (editing.entry as Debt).installmentsTotal : 0} /></label>
+                  <div className="form-actions">
+                    <button className="primary primary--full" disabled={busy}>{busy ? 'Salvando…' : editing?.kind === 'debts' ? 'Atualizar dívida' : 'Salvar dívida'}{!busy && <Icon name="arrow" size={17} />}</button>
+                    {editing?.kind === 'debts' && <button type="button" className="secondary-button" onClick={cancelEdit}>Cancelar edição</button>}
+                  </div>
+                </form>
+              </aside>
+            </div>
+
+            {selectedDebtId && (() => {
+              const debt = (data.debts as Debt[]).find(item => item.id === selectedDebtId)
+              if (!debt) return null
+              return (
+                <section className="panel payments-panel">
+                  <div className="panel__header">
+                    <div>
+                      <span className="panel__eyebrow">HISTÓRICO DE PAGAMENTOS</span>
+                      <h2>{debt.name}</h2>
+                    </div>
+                    <button className="link-button" onClick={() => { setSelectedDebtId(null); setDebtPayments([]) }}>Fechar</button>
+                  </div>
+
+                  <div className="payments-layout">
+                    <form className="payment-form" onSubmit={addDebtPayment}>
+                      <label><span>Valor pago</span><div className="money-input"><span>R$</span><input name="amount" type="number" min="0.01" max={debt.currentBalance} step="0.01" placeholder="0,00" required /></div></label>
+                      <label><span>Data do pagamento</span><input name="paymentDate" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required /></label>
+                      <label><span>Observação</span><input name="note" placeholder="Ex.: Parcela de setembro" maxLength={240} /></label>
+                      <label className="check-field"><input name="countsAsInstallment" type="checkbox" defaultChecked /><span>Contar como parcela paga</span></label>
+                      <button className="primary primary--full" disabled={busy || debt.currentBalance <= 0}>{debt.currentBalance <= 0 ? 'Dívida quitada' : busy ? 'Salvando…' : 'Registrar pagamento'}</button>
+                    </form>
+
+                    <div className="payment-history">
+                      {debtPayments.map(payment => (
+                        <div className="payment-row" key={payment.id}>
+                          <div>
+                            <strong>{money(payment.amount)}</strong>
+                            <span>{new Date(payment.paymentDate + 'T12:00:00').toLocaleDateString('pt-BR')}{payment.note ? ` • ${payment.note}` : ''}</span>
+                          </div>
+                          <button className="icon-action icon-action--danger" onClick={() => removeDebtPayment(payment.id)} aria-label="Excluir pagamento"><Icon name="trash" size={16} /></button>
+                        </div>
+                      ))}
+                      {!debtPayments.length && <div className="mini-empty"><span>Nenhum pagamento registrado para esta dívida.</span></div>}
+                    </div>
+                  </div>
+                </section>
+              )
+            })()}
           </div>
         ) : view === 'incomes' ? (
           <div className="records-layout">
