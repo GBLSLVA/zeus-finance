@@ -125,6 +125,7 @@ const migrations = [
         WHERE kind='debts';
       `);
     },
+  },
 ];
 
 export class SqliteDatabase {
