@@ -77,6 +77,17 @@ export class FinanceApi {
     this.repository = repository; this.auth = new AuthService(repository); this.origin = origin;
     this.server = createServer((req,res) => this.handle(req,res));
   }
+  isOriginAllowed(req) {
+    const origin = req.headers.origin;
+    if (!origin) return true;
+    if (this.origin === 'same-origin') {
+      const forwarded = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim();
+      const protocol = forwarded || (req.socket.encrypted ? 'https' : 'http');
+      return Boolean(req.headers.host) && origin === `${protocol}://${req.headers.host}`;
+    }
+    if (Array.isArray(this.origin)) return this.origin.includes(origin);
+    return origin === this.origin;
+  }
   async body(req) {
     let body = '';
     for await (const chunk of req) { body += chunk; if (Buffer.byteLength(body) > 16384) throw new HttpError(413,'Pedido muito grande.'); }
@@ -86,7 +97,7 @@ export class FinanceApi {
   async handle(req,res) {
     const send = (status, data, headers = {}) => { res.writeHead(status, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers}); res.end(JSON.stringify(data)); };
     try {
-      if (req.headers.origin && req.headers.origin !== this.origin) throw new HttpError(403,'Origem não permitida.');
+      if (!this.isOriginAllowed(req)) throw new HttpError(403,'Origem não permitida.');
       const path = new URL(req.url, 'http://localhost').pathname;
       if (path === '/api/health' && req.method === 'GET') return send(200,{status:'ok'});
       const token = /(?:^|;\s*)zeus_session=([a-f0-9]+)/.exec(req.headers.cookie ?? '')?.[1];
