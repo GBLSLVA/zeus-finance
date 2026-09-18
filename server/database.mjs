@@ -126,6 +126,25 @@ const migrations = [
       `);
     },
   },
+  {
+    version: 5,
+    name: 'monthly_category_budgets',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS budgets(
+          id INTEGER PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          month TEXT NOT NULL,
+          category TEXT NOT NULL,
+          limit_amount INTEGER NOT NULL CHECK(limit_amount>0),
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id,month,category)
+        );
+        CREATE INDEX IF NOT EXISTS budgets_owner_month ON budgets(user_id,month);
+      `);
+    },
+  },
 ];
 
 export class SqliteDatabase {
