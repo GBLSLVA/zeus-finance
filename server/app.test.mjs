@@ -26,14 +26,23 @@ test('API: autenticação, isolamento, validação, persistência e logout', asy
     assert.equal((await call('transactions','POST',{name:'Inválido',category:'Comida',value:-1},first.cookie)).status,400);
     assert.equal((await call('goals','POST',{name:'Reserva',target:1000,saved:100},first.cookie)).status,201);
     assert.equal((await call('debts','POST',{name:'Parcela',value:99},first.cookie)).status,201);
+    const salary=await call('incomes','POST',{name:'Salário',type:'salary',value:3500,receivedAt:'2026-09-01'},first.cookie);
+    assert.equal(salary.status,201);assert.equal(salary.data.type,'salary');assert.equal(salary.data.value,3500);
+    const extra=await call('incomes','POST',{name:'Freelance',type:'extra',value:450,receivedAt:'2026-09-10'},first.cookie);
+    assert.equal(extra.status,201);assert.equal(extra.data.type,'extra');
+    assert.equal((await call('incomes','POST',{name:'Inválida',type:'bonus',value:100},first.cookie)).status,400);
+    assert.equal((await call('incomes','GET',undefined,first.cookie)).data.length,2);
     const second=await call('register','POST',{email:'b@example.com',password:'secure-password-456'});
     assert.deepEqual((await call('transactions','GET',undefined,second.cookie)).data,[]);
+    assert.deepEqual((await call('incomes','GET',undefined,second.cookie)).data,[]);
     assert.equal((await call(`transactions/${added.data.id}`,'DELETE',undefined,second.cookie)).status,404);
+    assert.equal((await call(`incomes/${extra.data.id}`,'DELETE',undefined,second.cookie)).status,404);
     assert.equal((await call('transactions','GET',undefined,first.cookie,'https://untrusted.example')).status,403);
     const connection=new SqliteDatabase(path);
     assert.equal((await new FinanceRepository(connection).list(first.data.id,'transactions')).length,1);
     await connection.close();
     assert.equal((await call(`transactions/${added.data.id}`,'DELETE',undefined,first.cookie)).status,200);
+    assert.equal((await call(`incomes/${extra.data.id}`,'DELETE',undefined,first.cookie)).status,200);
     await call('logout','POST',undefined,first.cookie);
     assert.equal((await call('me','GET',undefined,first.cookie)).status,401);
   } finally {api.server.closeAllConnections();await new Promise(resolve=>api.server.close(resolve));await db.close();rmSync(dir,{recursive:true,force:true});}
