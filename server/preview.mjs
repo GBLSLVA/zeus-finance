@@ -5,6 +5,7 @@ import ts from 'typescript';
 import { readFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
+import { networkInterfaces } from 'node:os';
 import { FinanceApi, FinanceRepository } from './app.mjs';
 import { SqliteDatabase } from './database.mjs';
 
@@ -33,7 +34,7 @@ const html = (await readFile(new URL('index.html',root),'utf8')).replace('/src/m
 await mkdir(new URL('data/',root),{recursive:true});
 const database = new SqliteDatabase(fileURLToPath(new URL('data/zeus.sqlite',root)));
 const port = Number(process.env.PREVIEW_PORT ?? 5173);
-const api = new FinanceApi(new FinanceRepository(database),process.env.APP_ORIGIN ?? `http://localhost:${port}`);
+const api = new FinanceApi(new FinanceRepository(database),process.env.APP_ORIGIN ?? 'same-origin');
 const server = createServer((req,res)=>{
   const path=new URL(req.url,'http://localhost').pathname;
   if(path.startsWith('/api/')) { void api.handle(req,res); return; }
@@ -42,5 +43,21 @@ const server = createServer((req,res)=>{
   res.writeHead(200,{'Content-Type':`${asset[1]}; charset=utf-8`,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(asset[0]);
 });
 server.on('error',async error=>{console.error(error.message);await database.close();process.exitCode=1;});
-server.listen(port,'127.0.0.1',()=>console.log(`ZEUS Finance pronto: http://localhost:${port}\nInterface e API no mesmo processo. Ctrl+C para encerrar.`));
+const host = process.env.PREVIEW_HOST ?? '0.0.0.0';
+const lanAddresses = Object.values(networkInterfaces())
+  .flatMap(entries => entries ?? [])
+  .filter(entry => entry.family === 'IPv4' && !entry.internal)
+  .map(entry => entry.address);
+server.listen(port,host,()=>{
+  const lines = [
+    'ZEUS Finance pronto.',
+    `Computador: http://localhost:${port}`,
+    ...lanAddresses.map(address => `Celular:    http://${address}:${port}`),
+    '',
+    'Use no celular um dos enderecos acima, conectado a mesma rede Wi-Fi.',
+    'Se o Windows perguntar, permita o acesso do Node.js em redes privadas.',
+    'Ctrl+C para encerrar.'
+  ];
+  console.log(lines.join('\n'));
+});
 for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>server.close(async()=>{await database.close();process.exit(0);}));
