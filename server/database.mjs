@@ -86,6 +86,45 @@ const migrations = [
       `);
     },
   },
+  {
+    version: 4,
+    name: 'structured_debts',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS debts(
+          id INTEGER PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          name TEXT NOT NULL,
+          creditor TEXT,
+          original_amount INTEGER NOT NULL CHECK(original_amount>0),
+          current_balance INTEGER NOT NULL CHECK(current_balance>=0),
+          interest_rate_bps INTEGER NOT NULL DEFAULT 0 CHECK(interest_rate_bps>=0),
+          installments_total INTEGER NOT NULL DEFAULT 0 CHECK(installments_total>=0),
+          installments_paid INTEGER NOT NULL DEFAULT 0 CHECK(installments_paid>=0),
+          due_day INTEGER CHECK(due_day BETWEEN 1 AND 31),
+          status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','paid')),
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS debt_payments(
+          id INTEGER PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          debt_id INTEGER NOT NULL REFERENCES debts(id) ON DELETE CASCADE,
+          amount INTEGER NOT NULL CHECK(amount>0),
+          payment_date TEXT NOT NULL,
+          note TEXT,
+          counts_as_installment INTEGER NOT NULL DEFAULT 1 CHECK(counts_as_installment IN (0,1)),
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS debts_owner_status ON debts(user_id,status);
+        CREATE INDEX IF NOT EXISTS debt_payments_owner_debt_date ON debt_payments(user_id,debt_id,payment_date);
+
+        INSERT INTO debts(user_id,name,original_amount,current_balance,status,created_at,updated_at)
+        SELECT user_id,name,amount,amount,'active',created_at,COALESCE(updated_at,created_at)
+        FROM entries
+        WHERE kind='debts';
+      `);
+    },
 ];
 
 export class SqliteDatabase {
