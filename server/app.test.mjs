@@ -149,9 +149,30 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal((await call('incomes','POST',{name:'Inválida',type:'bonus',value:100},first.cookie)).status,400);
     assert.equal((await call('incomes','GET',undefined,first.cookie)).data.length,2);
 
+    const foodBudget = await call('budgets','POST',{month:'2026-09',category:'Comida',limit:800},first.cookie);
+    assert.equal(foodBudget.status,200);
+    assert.equal(foodBudget.data.category,'Comida');
+    assert.equal(foodBudget.data.limit,800);
+
+    const foodBudgetUpdated = await call('budgets','POST',{month:'2026-09',category:'Comida',limit:950},first.cookie);
+    assert.equal(foodBudgetUpdated.status,200);
+    assert.equal(foodBudgetUpdated.data.id,foodBudget.data.id);
+    assert.equal(foodBudgetUpdated.data.limit,950);
+
+    const transportBudget = await call('budgets','POST',{month:'2026-09',category:'Transporte',limit:400},first.cookie);
+    assert.equal(transportBudget.status,200);
+
+    const budgets = await call('budgets?month=2026-09','GET',undefined,first.cookie);
+    assert.equal(budgets.status,200);
+    assert.equal(budgets.data.length,2);
+    assert.equal((await call('budgets?month=2026-13','GET',undefined,first.cookie)).status,400);
+    assert.equal((await call('budgets','POST',{month:'2026-09',category:'Inválida',limit:100},first.cookie)).status,400);
+
     const second = await call('register','POST',{email:'b@example.com',password:'secure-password-456'});
     assert.deepEqual((await call('transactions','GET',undefined,second.cookie)).data,[]);
     assert.deepEqual((await call('incomes','GET',undefined,second.cookie)).data,[]);
+    assert.deepEqual((await call('budgets?month=2026-09','GET',undefined,second.cookie)).data,[]);
+    assert.equal((await call(`budgets/${foodBudget.data.id}`,'DELETE',undefined,second.cookie)).status,404);
     assert.equal((await call(`transactions/${added.data.id}`,'PUT',{name:'Ataque',category:'Outros',value:1,transactionDate:'2026-09-02'},second.cookie)).status,404);
     assert.equal((await call(`debts/${debt.data.id}/payments`,'POST',{amount:1,paymentDate:'2026-09-07'},second.cookie)).status,404);
     assert.equal((await call(`incomes/${extra.data.id}`,'DELETE',undefined,second.cookie)).status,404);
@@ -170,6 +191,8 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
 
     assert.equal((await call(`transactions/${added.data.id}`,'DELETE',undefined,first.cookie)).status,200);
     assert.equal((await call(`debts/${debt.data.id}`,'DELETE',undefined,first.cookie)).status,200);
+    assert.equal((await call(`budgets/${transportBudget.data.id}`,'DELETE',undefined,first.cookie)).status,200);
+    assert.equal((await call('budgets?month=2026-09','GET',undefined,first.cookie)).data.length,1);
     assert.equal((await call(`incomes/${extra.data.id}`,'DELETE',undefined,first.cookie)).status,200);
     await call('logout','POST',undefined,first.cookie);
     assert.equal((await call('me','GET',undefined,first.cookie)).status,401);
@@ -201,7 +224,7 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
   const migrated = new SqliteDatabase(path);
   try {
     const versions = migrated.db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(row => row.version);
-    assert.deepEqual(versions,[1,2,3,4]);
+    assert.deepEqual(versions,[1,2,3,4,5]);
 
     const entryColumns = migrated.db.prepare('PRAGMA table_info(entries)').all().map(row => row.name);
     assert.ok(entryColumns.includes('transaction_date'));
@@ -226,6 +249,11 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
     assert.equal(migratedDebt.original_amount,250000);
     assert.equal(migratedDebt.current_balance,250000);
     assert.equal(migratedDebt.status,'active');
+
+    const budgetColumns = migrated.db.prepare('PRAGMA table_info(budgets)').all().map(row => row.name);
+    assert.ok(budgetColumns.includes('month'));
+    assert.ok(budgetColumns.includes('category'));
+    assert.ok(budgetColumns.includes('limit_amount'));
   } finally {
     await migrated.close();
     rmSync(dir,{recursive:true,force:true});

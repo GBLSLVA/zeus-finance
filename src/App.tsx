@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import { api } from './api'
 
 type Kind = 'transactions' | 'debts' | 'goals'
-type View = Kind | 'incomes' | 'overview'
+type View = Kind | 'incomes' | 'budgets' | 'overview'
+type Category = 'Casa' | 'Comida' | 'Transporte' | 'Lazer' | 'Outros'
 type Entry = {
   id: number
   name: string
@@ -34,6 +35,14 @@ type DebtPayment = {
   countsAsInstallment: boolean
   createdAt: string
 }
+type Budget = {
+  id: number
+  month: string
+  category: Category
+  limit: number
+  createdAt: string
+  updatedAt: string
+}
 type Income = {
   id: number
   name: string
@@ -55,6 +64,7 @@ type User = { id: number; email: string }
 const titles: Record<View, string> = {
   overview: 'Visão geral',
   incomes: 'Receitas',
+  budgets: 'Orçamentos',
   transactions: 'Gastos',
   debts: 'Dívidas',
   goals: 'Metas',
@@ -63,14 +73,15 @@ const titles: Record<View, string> = {
 const descriptions: Record<View, string> = {
   overview: 'Receitas, gastos, dívidas e metas no mesmo panorama.',
   incomes: 'Cadastre seu salário mensal e todas as rendas extras.',
+  budgets: 'Defina limites mensais por categoria e acompanhe o consumo.',
   transactions: 'Acompanhe para onde o seu dinheiro está indo.',
   debts: 'Organize os valores que ainda precisam ser pagos.',
   goals: 'Transforme objetivos em progresso visível.',
 }
 
-const categories = ['Casa', 'Comida', 'Transporte', 'Lazer', 'Outros'] as const
+const categories: readonly Category[] = ['Casa', 'Comida', 'Transporte', 'Lazer', 'Outros']
 
-const categoryColor: Record<(typeof categories)[number], string> = {
+const categoryColor: Record<Category, string> = {
   Casa: '#58d6a3',
   Comida: '#7ca8ff',
   Transporte: '#f1c96b',
@@ -81,9 +92,27 @@ const categoryColor: Record<(typeof categories)[number], string> = {
 const money = (value: number) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
+const currentMonthKey = () => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+const shiftMonthKey = (monthKey: string, offset: number) => {
+  const [year, month] = monthKey.split('-').map(Number)
+  const date = new Date(year, month - 1 + offset, 1)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+const formatMonth = (monthKey: string) => {
+  const [year, month] = monthKey.split('-').map(Number)
+  return new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' })
+    .format(new Date(year, month - 1, 1))
+    .replace(/^./, letter => letter.toUpperCase())
+}
+
 const percent = (value: number) => `${Math.round(Math.max(0, Math.min(100, value)))}%`
 
-function Icon({ name, size = 20 }: { name: 'overview' | 'income' | 'wallet' | 'debt' | 'goal' | 'logout' | 'plus' | 'menu' | 'close' | 'arrow' | 'edit' | 'trash' | 'shield' | 'calendar'; size?: number }) {
+function Icon({ name, size = 20 }: { name: 'overview' | 'income' | 'budget' | 'wallet' | 'debt' | 'goal' | 'logout' | 'plus' | 'menu' | 'close' | 'arrow' | 'edit' | 'trash' | 'shield' | 'calendar'; size?: number }) {
   const common = {
     width: size,
     height: size,
@@ -99,6 +128,7 @@ function Icon({ name, size = 20 }: { name: 'overview' | 'income' | 'wallet' | 'd
   const paths: Record<typeof name, ReactNode> = {
     overview: <><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="5" rx="2" /><rect x="14" y="12" width="7" height="9" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /></>,
     income: <><path d="M12 3v18" /><path d="m7 8 5-5 5 5" /><path d="M5 14h14" /><path d="M5 18h14" /></>,
+    budget: <><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h10" /><circle cx="18" cy="18" r="3" /></>,
     wallet: <><path d="M4 7.5h13.5A2.5 2.5 0 0 1 20 10v7.5A2.5 2.5 0 0 1 17.5 20h-13A2.5 2.5 0 0 1 2 17.5v-11A2.5 2.5 0 0 1 4.5 4H17v3.5" /><path d="M15.5 12h4.5v4h-4.5a2 2 0 1 1 0-4Z" /></>,
     debt: <><rect x="3" y="5" width="18" height="14" rx="3" /><path d="M3 10h18" /><path d="M7 15h4" /></>,
     goal: <><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="4" /><path d="M12 4V2" /><path d="M20 12h2" /></>,
@@ -126,7 +156,7 @@ function MetricCard({
   label: string
   value: string
   detail: string
-  icon: 'income' | 'wallet' | 'debt' | 'goal'
+  icon: 'income' | 'budget' | 'wallet' | 'debt' | 'goal'
   tone?: 'default' | 'accent' | 'warning'
 }) {
   return (
@@ -158,6 +188,8 @@ export function App() {
   const [editing, setEditing] = useState<EditState>(null)
   const [selectedDebtId, setSelectedDebtId] = useState<number | null>(null)
   const [debtPayments, setDebtPayments] = useState<DebtPayment[]>([])
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthKey())
+  const [budgets, setBudgets] = useState<Budget[]>([])
 
   const load = async () => {
     const [transactions, debts, goals, incomeEntries] = await Promise.all([
@@ -183,6 +215,13 @@ export function App() {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (!user) return
+    api.request<Budget[]>(`budgets?month=${selectedMonth}`)
+      .then(setBudgets)
+      .catch(e => setError((e as Error).message))
+  }, [user, selectedMonth])
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -212,6 +251,8 @@ export function App() {
       setEditing(null)
       setSelectedDebtId(null)
       setDebtPayments([])
+      setBudgets([])
+      setSelectedMonth(currentMonthKey())
       setView('overview')
     } catch (e) {
       setError((e as Error).message)
@@ -220,7 +261,7 @@ export function App() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (view === 'overview') return
+    if (view === 'overview' || view === 'budgets') return
     const element = event.currentTarget
     const form = new FormData(element)
     setBusy(true)
@@ -317,6 +358,44 @@ export function App() {
     setError('')
   }
 
+  async function saveBudget(event: FormEvent<HTMLFormElement>, category: Category) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    setBusy(true)
+    setError('')
+    try {
+      const budget = await api.request<Budget>('budgets', 'POST', {
+        month: selectedMonth,
+        category,
+        limit: Number(form.get('limit')),
+      })
+      setBudgets(current => {
+        const exists = current.some(item => item.id === budget.id || item.category === category)
+        return exists
+          ? current.map(item => item.id === budget.id || item.category === category ? budget : item)
+          : [...current, budget]
+      })
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeBudget(id: number) {
+    if (!window.confirm('Remover este limite mensal?')) return
+    setBusy(true)
+    setError('')
+    try {
+      await api.request(`budgets/${id}`, 'DELETE')
+      setBudgets(current => current.filter(item => item.id !== id))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function openDebtPayments(debtId: number) {
     setBusy(true)
     setError('')
@@ -402,22 +481,23 @@ export function App() {
   }
 
   const dashboard = useMemo(() => {
-    const now = new Date()
-    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const monthKey = selectedMonth
     const monthStart = `${monthKey}-01`
     const monthEnd = `${monthKey}-31`
-    const belongsToCurrentMonth = (raw: string | null | undefined) => Boolean(raw && raw.slice(0, 7) === monthKey)
+    const belongsToMonth = (raw: string | null | undefined) => Boolean(raw && raw.slice(0, 7) === monthKey)
 
-    const monthly = data.transactions.filter(entry => belongsToCurrentMonth(entry.transactionDate))
+    const monthly = data.transactions.filter(entry => belongsToMonth(entry.transactionDate))
     const spent = monthly.reduce((total, entry) => total + entry.value, 0)
     const activeSalaries = incomes.filter(entry =>
       entry.type === 'salary'
-      && entry.active
       && entry.activeFrom <= monthEnd
-      && (!entry.activeUntil || entry.activeUntil >= monthStart),
+      && (
+        (entry.activeUntil && entry.activeUntil >= monthStart)
+        || (!entry.activeUntil && entry.active)
+      ),
     )
     const salary = activeSalaries.reduce((total, entry) => total + entry.value, 0)
-    const monthlyExtras = incomes.filter(entry => entry.type === 'extra' && belongsToCurrentMonth(entry.receivedAt))
+    const monthlyExtras = incomes.filter(entry => entry.type === 'extra' && belongsToMonth(entry.receivedAt))
     const extras = monthlyExtras.reduce((total, entry) => total + entry.value, 0)
     const income = salary + extras
     const balance = income - spent
@@ -440,6 +520,25 @@ export function App() {
         share: spent > 0 ? (total / spent) * 100 : 0,
       }
     }).filter(item => item.total > 0)
+    const budgetData = categories.map(category => {
+      const budget = budgets.find(item => item.category === category)
+      const spentInCategory = monthly
+        .filter(entry => entry.category === category)
+        .reduce((sum, entry) => sum + entry.value, 0)
+      const limit = budget?.limit ?? 0
+      return {
+        category,
+        budget,
+        limit,
+        spent: spentInCategory,
+        remaining: limit - spentInCategory,
+        usage: limit > 0 ? (spentInCategory / limit) * 100 : 0,
+      }
+    })
+    const budgetTotal = budgetData.reduce((total, item) => total + item.limit, 0)
+    const budgetedSpent = budgetData.filter(item => item.limit > 0).reduce((total, item) => total + item.spent, 0)
+    const budgetRemaining = budgetTotal - budgetedSpent
+    const budgetUsage = budgetTotal > 0 ? (budgetedSpent / budgetTotal) * 100 : 0
 
     return {
       monthly,
@@ -459,12 +558,39 @@ export function App() {
       targets,
       goalProgress,
       categoriesData,
+      budgetData,
+      budgetTotal,
+      budgetedSpent,
+      budgetRemaining,
+      budgetUsage,
     }
-  }, [data, incomes])
+  }, [data, incomes, budgets, selectedMonth])
 
-  const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' })
-    .format(new Date())
-    .replace(/^./, letter => letter.toUpperCase())
+  const historyData = useMemo(() => {
+    return Array.from({ length: 6 }, (_, index) => shiftMonthKey(selectedMonth, index - 5)).map(monthKey => {
+      const monthStart = `${monthKey}-01`
+      const monthEnd = `${monthKey}-31`
+      const expenses = data.transactions
+        .filter(entry => entry.transactionDate?.slice(0, 7) === monthKey)
+        .reduce((total, entry) => total + entry.value, 0)
+      const salaries = incomes
+        .filter(entry =>
+          entry.type === 'salary'
+          && entry.activeFrom <= monthEnd
+          && ((entry.activeUntil && entry.activeUntil >= monthStart) || (!entry.activeUntil && entry.active)),
+        )
+        .reduce((total, entry) => total + entry.value, 0)
+      const extras = incomes
+        .filter(entry => entry.type === 'extra' && entry.receivedAt?.slice(0, 7) === monthKey)
+        .reduce((total, entry) => total + entry.value, 0)
+      const income = salaries + extras
+      return { monthKey, income, expenses, balance: income - expenses }
+    })
+  }, [data.transactions, incomes, selectedMonth])
+
+  const historyMax = Math.max(1, ...historyData.flatMap(item => [item.income, item.expenses]))
+
+  const monthLabel = formatMonth(selectedMonth)
 
   const navigate = (next: View) => {
     setView(next)
@@ -553,9 +679,10 @@ export function App() {
     )
   }
 
-  const navItems: Array<{ key: View; label: string; icon: 'overview' | 'income' | 'wallet' | 'debt' | 'goal' }> = [
+  const navItems: Array<{ key: View; label: string; icon: 'overview' | 'income' | 'budget' | 'wallet' | 'debt' | 'goal' }> = [
     { key: 'overview', label: 'Visão geral', icon: 'overview' },
     { key: 'incomes', label: 'Receitas', icon: 'income' },
+    { key: 'budgets', label: 'Orçamentos', icon: 'budget' },
     { key: 'transactions', label: 'Gastos', icon: 'wallet' },
     { key: 'debts', label: 'Dívidas', icon: 'debt' },
     { key: 'goals', label: 'Metas', icon: 'goal' },
@@ -590,7 +717,7 @@ export function App() {
               <span>{item.label}</span>
               {item.key !== 'overview' && (
                 <span className="nav-count">
-                  {item.key === 'incomes' ? incomes.length : item.key === 'transactions' ? data.transactions.length : item.key === 'debts' ? data.debts.length : data.goals.length}
+                  {item.key === 'incomes' ? incomes.length : item.key === 'budgets' ? budgets.length : item.key === 'transactions' ? data.transactions.length : item.key === 'debts' ? data.debts.length : data.goals.length}
                 </span>
               )}
             </button>
@@ -638,6 +765,20 @@ export function App() {
           )}
         </header>
 
+        {(view === 'overview' || view === 'budgets') && (
+          <div className="period-toolbar" aria-label="Selecionar período">
+            <button className="period-button" onClick={() => setSelectedMonth(current => shiftMonthKey(current, -1))} aria-label="Mês anterior">‹</button>
+            <div className="period-toolbar__current">
+              <Icon name="calendar" size={16} />
+              <strong>{monthLabel}</strong>
+            </div>
+            <button className="period-button" onClick={() => setSelectedMonth(current => shiftMonthKey(current, 1))} aria-label="Próximo mês">›</button>
+            {selectedMonth !== currentMonthKey() && (
+              <button className="period-today" onClick={() => setSelectedMonth(currentMonthKey())}>Mês atual</button>
+            )}
+          </div>
+        )}
+
         {error && <p role="alert" className="alert alert--error">{error}</p>}
 
         {view === 'overview' ? (
@@ -646,7 +787,7 @@ export function App() {
               <div className="dashboard-hero__main">
                 <div className="hero-icon"><Icon name="income" size={22} /></div>
                 <div>
-                  <span>Receita total deste mês</span>
+                  <span>Receita total do período</span>
                   <strong>{money(dashboard.income)}</strong>
                   <p>{dashboard.income > 0 ? `Salário + ${dashboard.monthlyExtras.length} receita${dashboard.monthlyExtras.length === 1 ? '' : 's'} extra${dashboard.monthlyExtras.length === 1 ? '' : 's'} em ${monthLabel.toLowerCase()}` : 'Cadastre seu salário e suas receitas extras'}</p>
                 </div>
@@ -657,7 +798,7 @@ export function App() {
                   <strong>{money(dashboard.salary)}</strong>
                 </div>
                 <div>
-                  <span>Extras do mês</span>
+                  <span>Extras do período</span>
                   <strong>{money(dashboard.extras)}</strong>
                 </div>
               </div>
@@ -672,7 +813,7 @@ export function App() {
                 tone={dashboard.balance >= 0 ? 'accent' : 'warning'}
               />
               <MetricCard
-                label="Gastos neste mês"
+                label="Gastos no período"
                 value={money(dashboard.spent)}
                 detail={dashboard.monthly.length ? `${dashboard.monthly.length} lançamento${dashboard.monthly.length === 1 ? '' : 's'} registrado${dashboard.monthly.length === 1 ? '' : 's'}` : 'Nenhum gasto no mês'}
                 icon="wallet"
@@ -738,6 +879,64 @@ export function App() {
                           </div>
                         ))}
                     </div>
+                  </div>
+                )}
+              </article>
+
+              <article className="panel budget-panel">
+                <div className="panel__header">
+                  <div>
+                    <span className="panel__eyebrow">PLANEJAMENTO</span>
+                    <h2>Orçamento mensal</h2>
+                  </div>
+                  <button className="link-button" onClick={() => navigate('budgets')}>
+                    Ajustar limites <Icon name="arrow" size={16} />
+                  </button>
+                </div>
+
+                {dashboard.budgetTotal > 0 ? (
+                  <div className="budget-overview">
+                    <div className="budget-overview__summary">
+                      <div>
+                        <span>Limites definidos</span>
+                        <strong>{money(dashboard.budgetTotal)}</strong>
+                      </div>
+                      <div>
+                        <span>Gasto nas categorias orçadas</span>
+                        <strong>{money(dashboard.budgetedSpent)}</strong>
+                      </div>
+                      <div>
+                        <span>Disponível</span>
+                        <strong className={dashboard.budgetRemaining < 0 ? 'negative-value' : ''}>{money(dashboard.budgetRemaining)}</strong>
+                      </div>
+                    </div>
+                    <div className="progress-track budget-total-progress">
+                      <span style={{ width: percent(dashboard.budgetUsage) }} />
+                    </div>
+                    <div className="budget-overview__footer">
+                      <span>{percent(dashboard.budgetUsage)} dos limites consumidos</span>
+                      {dashboard.budgetRemaining < 0 && <strong>Excedido em {money(Math.abs(dashboard.budgetRemaining))}</strong>}
+                    </div>
+
+                    <div className="budget-mini-list">
+                      {dashboard.budgetData.filter(item => item.limit > 0).map(item => (
+                        <div className="budget-mini-row" key={item.category}>
+                          <span className="category-dot" style={{ background: categoryColor[item.category] }} />
+                          <div>
+                            <strong>{item.category}</strong>
+                            <span>{money(item.spent)} de {money(item.limit)}</span>
+                          </div>
+                          <strong className={item.remaining < 0 ? 'negative-value' : ''}>{percent(item.usage)}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mini-empty mini-empty--tall">
+                    <div className="empty-block__icon"><Icon name="budget" size={21} /></div>
+                    <strong>Nenhum limite definido para {monthLabel.toLowerCase()}.</strong>
+                    <span>Defina quanto pretende gastar em cada categoria.</span>
+                    <button className="secondary-button" onClick={() => navigate('budgets')}>Criar orçamento</button>
                   </div>
                 )}
               </article>
@@ -832,6 +1031,110 @@ export function App() {
                   </div>
                 )}
               </article>
+            </section>
+            <section className="panel history-panel">
+              <div className="panel__header">
+                <div>
+                  <span className="panel__eyebrow">HISTÓRICO</span>
+                  <h2>Últimos 6 meses até {monthLabel.toLowerCase()}</h2>
+                </div>
+                <span className="period-chip"><Icon name="calendar" size={15} /> 6 meses</span>
+              </div>
+              <div className="history-list">
+                {historyData.map(item => (
+                  <div className="history-row" key={item.monthKey}>
+                    <div className="history-row__month">
+                      <strong>{formatMonth(item.monthKey).split(' de ')[0]}</strong>
+                      <span>{item.monthKey.slice(0, 4)}</span>
+                    </div>
+                    <div className="history-bars">
+                      <div className="history-bar history-bar--income" title={`Receitas: ${money(item.income)}`}>
+                        <span style={{ width: `${(item.income / historyMax) * 100}%` }} />
+                      </div>
+                      <div className="history-bar history-bar--expense" title={`Gastos: ${money(item.expenses)}`}>
+                        <span style={{ width: `${(item.expenses / historyMax) * 100}%` }} />
+                      </div>
+                    </div>
+                    <div className="history-row__values">
+                      <span>{money(item.income)} entrada</span>
+                      <span>{money(item.expenses)} saída</span>
+                    </div>
+                    <strong className={item.balance < 0 ? 'negative-value' : 'positive-value'}>{money(item.balance)}</strong>
+                  </div>
+                ))}
+              </div>
+              <div className="history-legend">
+                <span><i className="history-legend__income" /> Receitas</span>
+                <span><i className="history-legend__expense" /> Gastos</span>
+                <span>Valor à direita = saldo do mês</span>
+              </div>
+            </section>
+          </div>
+        ) : view === 'budgets' ? (
+          <div className="budget-page">
+            <section className="budget-summary-grid">
+              <MetricCard
+                label="Orçamento definido"
+                value={money(dashboard.budgetTotal)}
+                detail={dashboard.budgetTotal > 0 ? `${budgets.length} categoria${budgets.length === 1 ? '' : 's'} com limite` : 'Nenhum limite definido neste mês'}
+                icon="budget"
+              />
+              <MetricCard
+                label="Consumido"
+                value={money(dashboard.budgetedSpent)}
+                detail={dashboard.budgetTotal > 0 ? `${percent(dashboard.budgetUsage)} dos limites definidos` : 'Defina limites para acompanhar o uso'}
+                icon="wallet"
+                tone={dashboard.budgetUsage > 100 ? 'warning' : 'default'}
+              />
+              <MetricCard
+                label="Disponível"
+                value={money(dashboard.budgetRemaining)}
+                detail={dashboard.budgetRemaining < 0 ? `Orçamento excedido em ${money(Math.abs(dashboard.budgetRemaining))}` : 'Quanto ainda resta nas categorias orçadas'}
+                icon="income"
+                tone={dashboard.budgetRemaining < 0 ? 'warning' : 'accent'}
+              />
+            </section>
+
+            <section className="budget-category-grid">
+              {dashboard.budgetData.map(item => (
+                <article className={`panel budget-category-card ${item.remaining < 0 ? 'budget-category-card--over' : ''}`} key={item.category}>
+                  <div className="budget-category-card__header">
+                    <div>
+                      <span className="category-dot" style={{ background: categoryColor[item.category] }} />
+                      <div>
+                        <strong>{item.category}</strong>
+                        <span>{item.budget ? 'Limite configurado' : 'Sem limite para este mês'}</span>
+                      </div>
+                    </div>
+                    {item.budget && <button className="icon-action icon-action--danger" onClick={() => removeBudget(item.budget!.id)} aria-label={`Remover orçamento de ${item.category}`}><Icon name="trash" size={16} /></button>}
+                  </div>
+
+                  <div className="budget-category-card__numbers">
+                    <div><span>Gasto</span><strong>{money(item.spent)}</strong></div>
+                    <div><span>Limite</span><strong>{item.limit > 0 ? money(item.limit) : '—'}</strong></div>
+                    <div><span>Restante</span><strong className={item.remaining < 0 ? 'negative-value' : ''}>{item.limit > 0 ? money(item.remaining) : '—'}</strong></div>
+                  </div>
+
+                  <div className="progress-track budget-category-progress">
+                    <span style={{ width: item.limit > 0 ? percent(item.usage) : '0%' }} />
+                  </div>
+                  <div className="budget-category-card__usage">
+                    <span>{item.limit > 0 ? `${percent(item.usage)} utilizado` : 'Defina um limite abaixo'}</span>
+                    {item.remaining < 0 && <strong>Excedido</strong>}
+                  </div>
+
+                  <form className="budget-inline-form" onSubmit={event => saveBudget(event, item.category)}>
+                    <label>
+                      <span>Limite para {monthLabel.toLowerCase()}</span>
+                      <div className="money-input">
+                        <span>R$</span>
+                        <input name="limit" type="number" min="0.01" max="100000000" step="0.01" defaultValue={item.limit || undefined} placeholder="0,00" required />
+                      </div>
+                    </label>
+                    <button className="primary" disabled={busy}>{item.budget ? 'Atualizar' : 'Definir limite'}</button>
+                  </form>
+                </article>
+              ))}
             </section>
           </div>
         ) : view === 'debts' ? (
