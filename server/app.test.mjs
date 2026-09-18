@@ -62,7 +62,53 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal((await call('transactions','POST',{name:'Data ruim',category:'Comida',value:10,transactionDate:'2026-02-31'},first.cookie)).status,400);
 
     assert.equal((await call('goals','POST',{name:'Reserva',target:1000,saved:100},first.cookie)).status,201);
-    assert.equal((await call('debts','POST',{name:'Parcela',value:99},first.cookie)).status,201);
+
+    const debt = await call('debts','POST',{
+      name:'Cartão',
+      creditor:'Banco Exemplo',
+      originalAmount:1200,
+      interestRate:2.5,
+      installmentsTotal:12,
+      dueDay:10,
+    },first.cookie);
+    assert.equal(debt.status,201);
+    assert.equal(debt.data.originalAmount,1200);
+    assert.equal(debt.data.currentBalance,1200);
+    assert.equal(debt.data.interestRate,2.5);
+    assert.equal(debt.data.installmentsTotal,12);
+    assert.equal(debt.data.installmentsPaid,0);
+    assert.equal(debt.data.status,'active');
+
+    const payment = await call(`debts/${debt.data.id}/payments`,'POST',{
+      amount:200,
+      paymentDate:'2026-09-05',
+      note:'Primeira parcela',
+      countsAsInstallment:true,
+    },first.cookie);
+    assert.equal(payment.status,201);
+    assert.equal(payment.data.payment.amount,200);
+    assert.equal(payment.data.debt.currentBalance,1000);
+    assert.equal(payment.data.debt.installmentsPaid,1);
+
+    const debtEdited = await call(`debts/${debt.data.id}`,'PUT',{
+      name:'Cartão atualizado',
+      creditor:'Banco Exemplo',
+      originalAmount:1300,
+      interestRate:2.5,
+      installmentsTotal:12,
+      dueDay:10,
+    },first.cookie);
+    assert.equal(debtEdited.status,200);
+    assert.equal(debtEdited.data.currentBalance,1100);
+
+    assert.equal((await call(`debts/${debt.data.id}/payments`,'POST',{
+      amount:1200,
+      paymentDate:'2026-09-06',
+    },first.cookie)).status,400);
+
+    const debtPayments = await call(`debts/${debt.data.id}/payments`,'GET',undefined,first.cookie);
+    assert.equal(debtPayments.status,200);
+    assert.equal(debtPayments.data.length,1);
 
     const salary = await call('incomes','POST',{
       name:'Salário',
@@ -107,6 +153,7 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.deepEqual((await call('transactions','GET',undefined,second.cookie)).data,[]);
     assert.deepEqual((await call('incomes','GET',undefined,second.cookie)).data,[]);
     assert.equal((await call(`transactions/${added.data.id}`,'PUT',{name:'Ataque',category:'Outros',value:1,transactionDate:'2026-09-02'},second.cookie)).status,404);
+    assert.equal((await call(`debts/${debt.data.id}/payments`,'POST',{amount:1,paymentDate:'2026-09-07'},second.cookie)).status,404);
     assert.equal((await call(`incomes/${extra.data.id}`,'DELETE',undefined,second.cookie)).status,404);
     assert.equal((await call('transactions','GET',undefined,first.cookie,'https://untrusted.example')).status,403);
 
@@ -116,7 +163,13 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal(persisted[0].transactionDate,'2026-09-02');
     await connection.close();
 
+    const paymentRemoved = await call(`debts/${debt.data.id}/payments/${payment.data.payment.id}`,'DELETE',undefined,first.cookie);
+    assert.equal(paymentRemoved.status,200);
+    assert.equal(paymentRemoved.data.currentBalance,1300);
+    assert.equal(paymentRemoved.data.installmentsPaid,0);
+
     assert.equal((await call(`transactions/${added.data.id}`,'DELETE',undefined,first.cookie)).status,200);
+    assert.equal((await call(`debts/${debt.data.id}`,'DELETE',undefined,first.cookie)).status,200);
     assert.equal((await call(`incomes/${extra.data.id}`,'DELETE',undefined,first.cookie)).status,200);
     await call('logout','POST',undefined,first.cookie);
     assert.equal((await call('me','GET',undefined,first.cookie)).status,401);
@@ -140,6 +193,7 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
     CREATE TABLE incomes(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),name TEXT NOT NULL,type TEXT NOT NULL CHECK(type IN ('salary','extra')),amount INTEGER NOT NULL CHECK(amount>0),received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
     INSERT INTO users(id,email,password) VALUES(1,'legacy@example.com','hash');
     INSERT INTO entries(id,user_id,kind,name,category,amount,saved,created_at) VALUES(1,1,'transactions','Mercado','Comida',1234,0,'2026-08-15 10:00:00');
+    INSERT INTO entries(id,user_id,kind,name,category,amount,saved,created_at) VALUES(2,1,'debts','Cartão antigo',NULL,250000,0,'2026-07-10 10:00:00');
     INSERT INTO incomes(id,user_id,name,type,amount,received_at) VALUES(1,1,'Salário antigo','salary',300000,'2026-01-05 12:00:00');
   `);
   legacy.close();
@@ -147,7 +201,7 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
   const migrated = new SqliteDatabase(path);
   try {
     const versions = migrated.db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(row => row.version);
-    assert.deepEqual(versions,[1,2,3]);
+    assert.deepEqual(versions,[1,2,3,4]);
 
     const entryColumns = migrated.db.prepare('PRAGMA table_info(entries)').all().map(row => row.name);
     assert.ok(entryColumns.includes('transaction_date'));
@@ -166,6 +220,12 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
     assert.equal(income.recurrence,'monthly');
     assert.equal(income.active_from,'2026-01-05');
     assert.equal(income.active,1);
+
+    const migratedDebt = migrated.db.prepare('SELECT * FROM debts WHERE user_id=1').get();
+    assert.equal(migratedDebt.name,'Cartão antigo');
+    assert.equal(migratedDebt.original_amount,250000);
+    assert.equal(migratedDebt.current_balance,250000);
+    assert.equal(migratedDebt.status,'active');
   } finally {
     await migrated.close();
     rmSync(dir,{recursive:true,force:true});
