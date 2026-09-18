@@ -779,7 +779,7 @@ export function App() {
           </div>
         )}
 
-        {error && <p role="alert" className="alert alert--error">{error}</p>
+        {error && <p role="alert" className="alert alert--error">{error}</p>}
 
         {view === 'overview' ? (
           <div className="dashboard">
