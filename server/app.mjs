@@ -52,10 +52,42 @@ const normalizeIncome = row => ({
   updatedAt: row.updated_at ?? row.received_at,
 });
 
+const normalizeDebt = row => ({
+  id: row.id,
+  name: row.name,
+  category: null,
+  value: row.current_balance / 100,
+  target: row.original_amount / 100,
+  saved: (row.original_amount - row.current_balance) / 100,
+  originalAmount: row.original_amount / 100,
+  currentBalance: row.current_balance / 100,
+  paidAmount: (row.original_amount - row.current_balance) / 100,
+  creditor: row.creditor ?? '',
+  interestRate: row.interest_rate_bps / 100,
+  installmentsTotal: row.installments_total,
+  installmentsPaid: row.installments_paid,
+  dueDay: row.due_day,
+  status: row.status,
+  transactionDate: row.created_at?.slice(0, 10),
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+const normalizeDebtPayment = row => ({
+  id: row.id,
+  debtId: row.debt_id,
+  amount: row.amount / 100,
+  paymentDate: row.payment_date,
+  note: row.note ?? '',
+  countsAsInstallment: Boolean(row.counts_as_installment),
+  createdAt: row.created_at,
+});
+
 export class FinanceRepository {
   constructor(database) { this.db = database; }
 
   async list(user, kind) {
+    if (kind === 'debts') return this.listDebts(user);
     const result = await this.db.query(
       'SELECT * FROM entries WHERE user_id=? AND kind=? ORDER BY COALESCE(transaction_date,substr(created_at,1,10)) DESC,id DESC',
       [user, kind],
@@ -64,6 +96,7 @@ export class FinanceRepository {
   }
 
   async add(user, kind, data) {
+    if (kind === 'debts') return this.addDebt(user, data);
     const name = text(data.name);
     const amount = cents(kind === 'goals' ? data.target : data.value);
     const category = kind === 'transactions' ? text(data.category) : null;
@@ -78,6 +111,7 @@ export class FinanceRepository {
   }
 
   async update(user, kind, id, data) {
+    if (kind === 'debts') return this.updateDebt(user, id, data);
     const name = text(data.name);
     const amount = cents(kind === 'goals' ? data.target : data.value);
     const category = kind === 'transactions' ? text(data.category) : null;
@@ -93,8 +127,116 @@ export class FinanceRepository {
   }
 
   async remove(user, kind, id) {
+    if (kind === 'debts') return this.removeDebt(user, id);
     const result = await this.db.query('DELETE FROM entries WHERE user_id=? AND kind=? AND id=?', [user,kind,id]);
     if (!result.rowsAffected[0]) throw new HttpError(404, 'Registro não encontrado.');
+  }
+
+  async listDebts(user) {
+    const result = await this.db.query(
+      "SELECT * FROM debts WHERE user_id=? ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, current_balance DESC, id DESC",
+      [user],
+    );
+    return result.recordset.map(normalizeDebt);
+  }
+
+  debtFields(data) {
+    const name = text(data.name);
+    const creditor = data.creditor ? text(data.creditor, 120) : null;
+    const originalAmount = cents(data.originalAmount ?? data.value);
+    const interestRate = Number(data.interestRate ?? 0);
+    if (!Number.isFinite(interestRate) || interestRate < 0 || interestRate > 100) throw new HttpError(400, 'Taxa de juros inválida.');
+    const installmentsTotal = Number(data.installmentsTotal ?? 0);
+    if (!Number.isInteger(installmentsTotal) || installmentsTotal < 0 || installmentsTotal > 600) throw new HttpError(400, 'Quantidade de parcelas inválida.');
+    const dueDay = data.dueDay === null || data.dueDay === undefined || data.dueDay === '' ? null : Number(data.dueDay);
+    if (dueDay !== null && (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31)) throw new HttpError(400, 'Dia de vencimento inválido.');
+    return {
+      name,
+      creditor,
+      originalAmount,
+      interestRateBps: Math.round(interestRate * 100),
+      installmentsTotal,
+      dueDay,
+    };
+  }
+
+  async addDebt(user, data) {
+    const fields = this.debtFields(data);
+    const result = await this.db.query(
+      "INSERT INTO debts(user_id,name,creditor,original_amount,current_balance,interest_rate_bps,installments_total,installments_paid,due_day,status,updated_at) VALUES(?,?,?,?,?,?,?,0,?,'active',CURRENT_TIMESTAMP) RETURNING id",
+      [user, fields.name, fields.creditor, fields.originalAmount, fields.originalAmount, fields.interestRateBps, fields.installmentsTotal, fields.dueDay],
+    );
+    return (await this.listDebts(user)).find(row => row.id === result.recordset[0].id);
+  }
+
+  async updateDebt(user, id, data) {
+    const fields = this.debtFields(data);
+    const current = (await this.db.query('SELECT * FROM debts WHERE user_id=? AND id=?', [user,id])).recordset[0];
+    if (!current) throw new HttpError(404, 'Dívida não encontrada.');
+    const paid = (await this.db.query('SELECT COALESCE(SUM(amount),0) AS total FROM debt_payments WHERE user_id=? AND debt_id=?', [user,id])).recordset[0].total;
+    if (fields.originalAmount < paid) throw new HttpError(400, 'O valor original não pode ser menor que o total já pago.');
+    const currentBalance = fields.originalAmount - paid;
+    const status = currentBalance === 0 ? 'paid' : 'active';
+    await this.db.query(
+      'UPDATE debts SET name=?,creditor=?,original_amount=?,current_balance=?,interest_rate_bps=?,installments_total=?,due_day=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=?',
+      [fields.name, fields.creditor, fields.originalAmount, currentBalance, fields.interestRateBps, fields.installmentsTotal, fields.dueDay, status, user, id],
+    );
+    return (await this.listDebts(user)).find(row => row.id === id);
+  }
+
+  async removeDebt(user, id) {
+    const result = await this.db.query('DELETE FROM debts WHERE user_id=? AND id=?', [user,id]);
+    if (!result.rowsAffected[0]) throw new HttpError(404, 'Dívida não encontrada.');
+  }
+
+  async listDebtPayments(user, debtId) {
+    const debt = (await this.db.query('SELECT id FROM debts WHERE user_id=? AND id=?', [user,debtId])).recordset[0];
+    if (!debt) throw new HttpError(404, 'Dívida não encontrada.');
+    const result = await this.db.query(
+      'SELECT * FROM debt_payments WHERE user_id=? AND debt_id=? ORDER BY payment_date DESC,id DESC',
+      [user,debtId],
+    );
+    return result.recordset.map(normalizeDebtPayment);
+  }
+
+  async recalculateDebt(user, debtId) {
+    const debt = (await this.db.query('SELECT * FROM debts WHERE user_id=? AND id=?', [user,debtId])).recordset[0];
+    if (!debt) throw new HttpError(404, 'Dívida não encontrada.');
+    const summary = (await this.db.query(
+      'SELECT COALESCE(SUM(amount),0) AS paid, COALESCE(SUM(counts_as_installment),0) AS installments FROM debt_payments WHERE user_id=? AND debt_id=?',
+      [user,debtId],
+    )).recordset[0];
+    const balance = Math.max(0, debt.original_amount - summary.paid);
+    const installmentsPaid = debt.installments_total > 0 ? Math.min(debt.installments_total, summary.installments) : summary.installments;
+    await this.db.query(
+      'UPDATE debts SET current_balance=?,installments_paid=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=?',
+      [balance, installmentsPaid, balance === 0 ? 'paid' : 'active', user, debtId],
+    );
+    return (await this.listDebts(user)).find(row => row.id === debtId);
+  }
+
+  async addDebtPayment(user, debtId, data) {
+    const debt = (await this.db.query('SELECT * FROM debts WHERE user_id=? AND id=?', [user,debtId])).recordset[0];
+    if (!debt) throw new HttpError(404, 'Dívida não encontrada.');
+    if (debt.current_balance <= 0) throw new HttpError(400, 'Esta dívida já está quitada.');
+    const amount = cents(data.amount);
+    if (amount > debt.current_balance) throw new HttpError(400, 'O pagamento não pode ser maior que o saldo atual.');
+    const paymentDate = dateOnly(data.paymentDate ?? today());
+    const note = data.note ? text(data.note, 240) : null;
+    const countsAsInstallment = data.countsAsInstallment === false ? 0 : 1;
+    const result = await this.db.query(
+      'INSERT INTO debt_payments(user_id,debt_id,amount,payment_date,note,counts_as_installment) VALUES(?,?,?,?,?,?) RETURNING id',
+      [user,debtId,amount,paymentDate,note,countsAsInstallment],
+    );
+    const debtAfter = await this.recalculateDebt(user,debtId);
+    const payment = (await this.listDebtPayments(user,debtId)).find(row => row.id === result.recordset[0].id);
+    return {payment,debt:debtAfter};
+  }
+
+  async removeDebtPayment(user, debtId, paymentId) {
+    const result = await this.db.query('DELETE FROM debt_payments WHERE user_id=? AND debt_id=? AND id=?', [user,debtId,paymentId]);
+    if (!result.rowsAffected[0]) throw new HttpError(404, 'Pagamento não encontrado.');
+    return this.recalculateDebt(user,debtId);
   }
 
   async listIncomes(user) {
@@ -274,6 +416,16 @@ export class FinanceApi {
         if (req.method === 'POST' && !id) return send(201,await this.repository.addIncome(user,await this.body(req)));
         if (req.method === 'PUT' && id) return send(200,await this.repository.updateIncome(user,id,await this.body(req)));
         if (req.method === 'DELETE' && id) { await this.repository.removeIncome(user,id); return send(200,{}); }
+        throw new HttpError(405,'Método não permitido.');
+      }
+
+      const debtPaymentRoute = /^\/api\/debts\/(\d+)\/payments(?:\/(\d+))?$/.exec(path);
+      if (debtPaymentRoute) {
+        const debtId = Number(debtPaymentRoute[1]);
+        const paymentId = debtPaymentRoute[2] ? Number(debtPaymentRoute[2]) : null;
+        if (req.method === 'GET' && !paymentId) return send(200,await this.repository.listDebtPayments(user,debtId));
+        if (req.method === 'POST' && !paymentId) return send(201,await this.repository.addDebtPayment(user,debtId,await this.body(req)));
+        if (req.method === 'DELETE' && paymentId) return send(200,await this.repository.removeDebtPayment(user,debtId,paymentId));
         throw new HttpError(405,'Método não permitido.');
       }
 
