@@ -1,58 +1,734 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { api } from './api'
 
 type Kind = 'transactions' | 'debts' | 'goals'
-type Entry = {id:number; name:string; category:string; value:number; target:number; saved:number; createdAt:string}
-type User = {id:number; email:string}
-const titles = {overview:'Visão geral',transactions:'Gastos',debts:'Dívidas',goals:'Metas'}
-const money = (n:number) => n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
-const categories = ['Casa','Comida','Transporte','Lazer','Outros']
+type View = Kind | 'overview'
+type Entry = {
+  id: number
+  name: string
+  category: string
+  value: number
+  target: number
+  saved: number
+  createdAt: string
+}
+type User = { id: number; email: string }
+
+const titles: Record<View, string> = {
+  overview: 'Visão geral',
+  transactions: 'Gastos',
+  debts: 'Dívidas',
+  goals: 'Metas',
+}
+
+const descriptions: Record<View, string> = {
+  overview: 'Seu panorama financeiro em um só lugar.',
+  transactions: 'Acompanhe para onde o seu dinheiro está indo.',
+  debts: 'Organize os valores que ainda precisam ser pagos.',
+  goals: 'Transforme objetivos em progresso visível.',
+}
+
+const categories = ['Casa', 'Comida', 'Transporte', 'Lazer', 'Outros'] as const
+
+const categoryColor: Record<(typeof categories)[number], string> = {
+  Casa: '#58d6a3',
+  Comida: '#7ca8ff',
+  Transporte: '#f1c96b',
+  Lazer: '#bd91ff',
+  Outros: '#ff8f96',
+}
+
+const money = (value: number) =>
+  value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+const percent = (value: number) => `${Math.round(Math.max(0, Math.min(100, value)))}%`
+
+function Icon({ name, size = 20 }: { name: 'overview' | 'wallet' | 'debt' | 'goal' | 'logout' | 'plus' | 'menu' | 'close' | 'arrow' | 'trash' | 'shield' | 'calendar'; size?: number }) {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  }
+
+  const paths: Record<typeof name, ReactNode> = {
+    overview: <><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="5" rx="2" /><rect x="14" y="12" width="7" height="9" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /></>,
+    wallet: <><path d="M4 7.5h13.5A2.5 2.5 0 0 1 20 10v7.5A2.5 2.5 0 0 1 17.5 20h-13A2.5 2.5 0 0 1 2 17.5v-11A2.5 2.5 0 0 1 4.5 4H17v3.5" /><path d="M15.5 12h4.5v4h-4.5a2 2 0 1 1 0-4Z" /></>,
+    debt: <><rect x="3" y="5" width="18" height="14" rx="3" /><path d="M3 10h18" /><path d="M7 15h4" /></>,
+    goal: <><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="4" /><path d="M12 4V2" /><path d="M20 12h2" /></>,
+    logout: <><path d="M10 17l5-5-5-5" /><path d="M15 12H3" /><path d="M14 4h4a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-4" /></>,
+    plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
+    menu: <><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h16" /></>,
+    close: <><path d="M6 6l12 12" /><path d="M18 6L6 18" /></>,
+    arrow: <><path d="M5 12h14" /><path d="m14 7 5 5-5 5" /></>,
+    trash: <><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M7 7l1 13h8l1-13" /><path d="M10 11v5" /><path d="M14 11v5" /></>,
+    shield: <><path d="M12 3 5 6v5c0 4.7 2.7 8 7 10 4.3-2 7-5.3 7-10V6l-7-3Z" /><path d="m9.5 12 1.7 1.7 3.6-4" /></>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M8 3v4" /><path d="M16 3v4" /><path d="M3 10h18" /></>,
+  }
+
+  return <svg {...common}>{paths[name]}</svg>
+}
+
+function MetricCard({
+  label,
+  value,
+  detail,
+  icon,
+  tone = 'default',
+}: {
+  label: string
+  value: string
+  detail: string
+  icon: 'wallet' | 'debt' | 'goal'
+  tone?: 'default' | 'accent' | 'warning'
+}) {
+  return (
+    <article className={`metric-card metric-card--${tone}`}>
+      <div className="metric-card__top">
+        <span className="metric-card__label">{label}</span>
+        <span className="metric-card__icon"><Icon name={icon} size={18} /></span>
+      </div>
+      <strong>{value}</strong>
+      <span className="metric-card__detail">{detail}</span>
+    </article>
+  )
+}
 
 export function App() {
-  const [user,setUser] = useState<User|null>(null)
-  const [loading,setLoading] = useState(true)
-  const [register,setRegister] = useState(false)
-  const [busy,setBusy] = useState(false)
-  const [error,setError] = useState('')
-  const [view,setView] = useState<Kind|'overview'>('overview')
-  const [menu,setMenu] = useState(false)
-  const [data,setData] = useState<Record<Kind,Entry[]>>({transactions:[],debts:[],goals:[]})
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [register, setRegister] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [view, setView] = useState<View>('overview')
+  const [menu, setMenu] = useState(false)
+  const [data, setData] = useState<Record<Kind, Entry[]>>({
+    transactions: [],
+    debts: [],
+    goals: [],
+  })
+
   const load = async () => {
-    const [transactions,debts,goals] = await Promise.all([api.request<Entry[]>('transactions'),api.request<Entry[]>('debts'),api.request<Entry[]>('goals')])
-    setData({transactions,debts,goals})
+    const [transactions, debts, goals] = await Promise.all([
+      api.request<Entry[]>('transactions'),
+      api.request<Entry[]>('debts'),
+      api.request<Entry[]>('goals'),
+    ])
+    setData({ transactions, debts, goals })
   }
-  useEffect(()=>{api.request<User>('me').then(async u=>{await load();setUser(u)}).catch(e=>{if(e.message !== 'Entre na sua conta.' && e.message !== 'Sessão expirada.') setError('Inicie o backend para acessar sua conta.')}).finally(()=>setLoading(false))},[])
-  async function login(event:FormEvent<HTMLFormElement>) {
-    event.preventDefault();setBusy(true);setError('')
+
+  useEffect(() => {
+    api.request<User>('me')
+      .then(async currentUser => {
+        await load()
+        setUser(currentUser)
+      })
+      .catch(e => {
+        if (e.message !== 'Entre na sua conta.' && e.message !== 'Sessão expirada.') {
+          setError('Inicie o backend para acessar sua conta.')
+        }
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function login(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
     const form = new FormData(event.currentTarget)
-    try {const u=await api.request<User>(register?'register':'login','POST',{email:form.get('email'),password:form.get('password')});await load();setUser(u)}
-    catch(e){setError((e as Error).message)}finally{setBusy(false)}
-  }
-  async function logout() {
-    try {await api.request('logout','POST');setUser(null);setData({transactions:[],debts:[],goals:[]});setView('overview')}
-    catch(e){setError((e as Error).message)}
-  }
-  async function add(event:FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if(view==='overview')return
-    const element=event.currentTarget,form=new FormData(element)
-    setBusy(true);setError('')
     try {
-      const entry=await api.request<Entry>(view,'POST',{name:form.get('name'),category:form.get('category'),value:Number(form.get('value')),target:Number(form.get('value')),saved:Number(form.get('saved')??0)})
-      setData(current=>({...current,[view]:[entry,...current[view]]}));element.reset()
-    }catch(e){setError((e as Error).message)}finally{setBusy(false)}
+      const currentUser = await api.request<User>(register ? 'register' : 'login', 'POST', {
+        email: form.get('email'),
+        password: form.get('password'),
+      })
+      await load()
+      setUser(currentUser)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
   }
-  async function remove(kind:Kind,id:number) {
-    if(!window.confirm('Excluir este registro?'))return
-    setBusy(true);setError('')
-    try{await api.request(`${kind}/${id}`,'DELETE');setData(current=>({...current,[kind]:current[kind].filter(entry=>entry.id!==id)}))}
-    catch(e){setError((e as Error).message)}finally{setBusy(false)}
+
+  async function logout() {
+    try {
+      await api.request('logout', 'POST')
+      setUser(null)
+      setData({ transactions: [], debts: [], goals: [] })
+      setView('overview')
+    } catch (e) {
+      setError((e as Error).message)
+    }
   }
-  if(loading)return <main><p role="status">Conectando ao ZEUS Finance…</p></main>
-  if(!user)return <main className="auth-layout"><section className="card form-card"><p className="eyebrow">ZEUS FINANCE</p><h1>{register?'Crie sua conta':'Seu dinheiro, com clareza.'}</h1><p>Gastos, dívidas e metas em um só lugar.</p><form onSubmit={login}><label>E-mail<input name="email" type="email" autoComplete="email" required maxLength={254}/></label><label>Senha<input name="password" type="password" autoComplete={register?'new-password':'current-password'} minLength={12} maxLength={128} required/></label><small>Use no mínimo 12 caracteres.</small><button className="primary" disabled={busy}>{busy?'Aguarde…':register?'Criar conta':'Entrar'}</button></form><button className="text-button" onClick={()=>{setRegister(!register);setError('')}}>{register?'Já tenho uma conta':'Criar minha conta'}</button>{error&&<p role="alert" className="negative">{error}</p>}</section></main>
-  const now=new Date(), monthly=data.transactions.filter(e=>{const d=new Date(e.createdAt.replace(' ','T')+'Z');return d.getUTCFullYear()===now.getUTCFullYear()&&d.getUTCMonth()===now.getUTCMonth()})
-  const spent=monthly.reduce((n,e)=>n+e.value,0), debt=data.debts.reduce((n,e)=>n+e.value,0)
-  const navigate=(next:typeof view)=>{setView(next);setMenu(false);setError('')}
-  return <div className="shell"><aside id="navigation" className={`sidebar ${menu?'open':''}`}><div className="brand"><span className="brand-mark">Z</span>ZEUS FINANCE</div><nav aria-label="Navegação principal">{(Object.keys(titles) as (keyof typeof titles)[]).map(key=><button key={key} className={`nav-item ${view===key?'active':''}`} aria-current={view===key?'page':undefined} onClick={()=>navigate(key)}>{titles[key]}</button>)}<button className="mobile-toggle" onClick={()=>setMenu(false)} aria-label="Fechar menu">×</button></nav><div className="sidebar-bottom"><div className="security">{user.email}<small>Dados salvos no servidor</small></div><button className="text-button" onClick={logout}>Sair da conta</button></div></aside><main><header className="topbar"><button className="mobile-toggle" aria-controls="navigation" aria-expanded={menu} onClick={()=>setMenu(!menu)} aria-label="Abrir menu">☰</button><div><p className="eyebrow">PAINEL FINANCEIRO</p><h1>{titles[view]}</h1></div></header>{error&&<p role="alert" className="negative">{error}</p>}
-    {view==='overview'?<div className="content-grid"><section className="metrics">{[['Gastos neste mês (UTC)',money(spent)],['Dívidas registradas',money(debt)],['Valor reservado',money(data.goals.reduce((n,g)=>n+g.saved,0))],['Metas cadastradas',String(data.goals.length)]].map(([label,value])=><article className="card metric" key={label}><span className="metric-label">{label}</span><strong>{value}</strong></article>)}</section><section className="card"><h2>Gastos por categoria neste mês</h2>{spent===0?<p className="empty-state">Registre seu primeiro gasto para acompanhar a distribuição.</p>:categories.map(category=>{const total=monthly.filter(e=>e.category===category).reduce((n,e)=>n+e.value,0);return <div key={category} className="goal"><div className="goal-head"><span>{category}</span><b>{money(total)}</b></div><div className="progress"><b style={{width:`${total/spent*100}%`}}/></div></div>})}</section><section className="card"><p className="eyebrow">COMECE POR AQUI</p><h2>Construa seu acompanhamento</h2><p>Registre seus gastos, os saldos das dívidas e as metas que deseja alcançar.</p><button className="primary" onClick={()=>navigate('transactions')}>Registrar gasto</button></section></div>:<div className="content-grid single-view"><section className="card table-card"><h2>{titles[view]} registrados</h2><div className="table-wrap"><table><thead><tr><th>Descrição</th><th>{view==='goals'?'Reservado / alvo':'Valor'}</th><th>Ação</th></tr></thead><tbody>{data[view].map(entry=><tr key={entry.id}><td><strong>{entry.name}</strong><small>{view==='transactions'?entry.category:''}</small></td><td>{view==='goals'?`${money(entry.saved)} / ${money(entry.target)}`:money(entry.value)}</td><td><button className="text-button" disabled={busy} onClick={()=>remove(view,entry.id)} aria-label={`Excluir ${entry.name}`}>Excluir</button></td></tr>)}{!data[view].length&&<tr><td colSpan={3} className="empty-state">Nenhum registro. Comece pelo formulário.</td></tr>}</tbody></table></div></section><section className="card form-card"><h2>Adicionar {view==='goals'?'meta':view==='debts'?'dívida':'gasto'}</h2><form key={view} onSubmit={add}><label>Descrição<input name="name" required maxLength={120}/></label>{view==='transactions'&&<label>Categoria<select name="category">{categories.map(c=><option key={c}>{c}</option>)}</select></label>}<label>{view==='goals'?'Valor alvo':'Valor'}<input name="value" type="number" min="0.01" max="100000000" step="0.01" required/></label>{view==='goals'&&<label>Valor já reservado<input name="saved" type="number" min="0" max="100000000" step="0.01" defaultValue="0" required/></label>}<button className="primary" disabled={busy}>{busy?'Salvando…':'Salvar registro'}</button></form></section></div>}
-  </main></div>
+
+  async function add(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (view === 'overview') return
+    const element = event.currentTarget
+    const form = new FormData(element)
+    setBusy(true)
+    setError('')
+    try {
+      const entry = await api.request<Entry>(view, 'POST', {
+        name: form.get('name'),
+        category: form.get('category'),
+        value: Number(form.get('value')),
+        target: Number(form.get('value')),
+        saved: Number(form.get('saved') ?? 0),
+      })
+      setData(current => ({ ...current, [view]: [entry, ...current[view]] }))
+      element.reset()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove(kind: Kind, id: number) {
+    if (!window.confirm('Excluir este registro?')) return
+    setBusy(true)
+    setError('')
+    try {
+      await api.request(`${kind}/${id}`, 'DELETE')
+      setData(current => ({
+        ...current,
+        [kind]: current[kind].filter(entry => entry.id !== id),
+      }))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const dashboard = useMemo(() => {
+    const now = new Date()
+    const monthly = data.transactions.filter(entry => {
+      const date = new Date(entry.createdAt.replace(' ', 'T') + 'Z')
+      return date.getUTCFullYear() === now.getUTCFullYear() && date.getUTCMonth() === now.getUTCMonth()
+    })
+
+    const spent = monthly.reduce((total, entry) => total + entry.value, 0)
+    const debt = data.debts.reduce((total, entry) => total + entry.value, 0)
+    const saved = data.goals.reduce((total, entry) => total + entry.saved, 0)
+    const targets = data.goals.reduce((total, entry) => total + entry.target, 0)
+    const goalProgress = targets > 0 ? (saved / targets) * 100 : 0
+    const categoriesData = categories.map(category => {
+      const total = monthly
+        .filter(entry => entry.category === category)
+        .reduce((sum, entry) => sum + entry.value, 0)
+      return {
+        category,
+        total,
+        share: spent > 0 ? (total / spent) * 100 : 0,
+      }
+    }).filter(item => item.total > 0)
+
+    return { monthly, spent, debt, saved, targets, goalProgress, categoriesData }
+  }, [data])
+
+  const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' })
+    .format(new Date())
+    .replace(/^./, letter => letter.toUpperCase())
+
+  const navigate = (next: View) => {
+    setView(next)
+    setMenu(false)
+    setError('')
+  }
+
+  if (loading) {
+    return (
+      <main className="loading-screen">
+        <div className="loading-mark">Z</div>
+        <p role="status">Carregando seu painel financeiro…</p>
+      </main>
+    )
+  }
+
+  if (!user) {
+    return (
+      <main className="auth-page">
+        <section className="auth-brand-panel" aria-hidden="true">
+          <div className="auth-brand">
+            <span className="brand-mark">Z</span>
+            <span>ZEUS FINANCE</span>
+          </div>
+          <div className="auth-message">
+            <span className="auth-kicker">FINANÇAS SEM RUÍDO</span>
+            <h2>Veja o que importa. Decida com mais clareza.</h2>
+            <p>Um painel direto para gastos, dívidas e metas — sem planilhas espalhadas.</p>
+          </div>
+          <div className="auth-proof">
+            <Icon name="shield" size={18} />
+            <span>Seus registros ficam separados por conta e salvos no servidor.</span>
+          </div>
+        </section>
+
+        <section className="auth-form-panel">
+          <div className="auth-form-wrap">
+            <div className="auth-mobile-brand">
+              <span className="brand-mark">Z</span>
+              <strong>ZEUS FINANCE</strong>
+            </div>
+            <span className="section-kicker">{register ? 'NOVA CONTA' : 'BEM-VINDO DE VOLTA'}</span>
+            <h1>{register ? 'Comece a organizar suas finanças.' : 'Entre no seu painel.'}</h1>
+            <p className="auth-subtitle">
+              {register
+                ? 'Crie sua conta e concentre seus registros financeiros em um só lugar.'
+                : 'Use seu e-mail e senha para continuar de onde parou.'}
+            </p>
+
+            <form onSubmit={login} className="auth-form">
+              <label>
+                <span>E-mail</span>
+                <input name="email" type="email" autoComplete="email" placeholder="voce@exemplo.com" required maxLength={254} />
+              </label>
+              <label>
+                <span>Senha</span>
+                <input
+                  name="password"
+                  type="password"
+                  autoComplete={register ? 'new-password' : 'current-password'}
+                  minLength={12}
+                  maxLength={128}
+                  placeholder="••••••••••••"
+                  required
+                />
+              </label>
+              <small>Use no mínimo 12 caracteres.</small>
+              <button className="primary primary--full" disabled={busy}>
+                {busy ? 'Aguarde…' : register ? 'Criar conta' : 'Entrar no ZEUS'}
+                {!busy && <Icon name="arrow" size={18} />}
+              </button>
+            </form>
+
+            <button className="switch-auth" onClick={() => { setRegister(!register); setError('') }}>
+              {register ? 'Já tenho uma conta' : 'Ainda não tenho conta'}
+            </button>
+            {error && <p role="alert" className="alert alert--error">{error}</p>}
+          </div>
+        </section>
+      </main>
+    )
+  }
+
+  const navItems: Array<{ key: View; label: string; icon: 'overview' | 'wallet' | 'debt' | 'goal' }> = [
+    { key: 'overview', label: 'Visão geral', icon: 'overview' },
+    { key: 'transactions', label: 'Gastos', icon: 'wallet' },
+    { key: 'debts', label: 'Dívidas', icon: 'debt' },
+    { key: 'goals', label: 'Metas', icon: 'goal' },
+  ]
+
+  return (
+    <div className="app-shell">
+      {menu && <button className="nav-backdrop" aria-label="Fechar menu" onClick={() => setMenu(false)} />}
+
+      <aside id="navigation" className={`sidebar ${menu ? 'open' : ''}`}>
+        <div className="sidebar__brand">
+          <span className="brand-mark">Z</span>
+          <div>
+            <strong>ZEUS</strong>
+            <span>FINANCE</span>
+          </div>
+          <button className="sidebar-close" onClick={() => setMenu(false)} aria-label="Fechar menu">
+            <Icon name="close" size={20} />
+          </button>
+        </div>
+
+        <div className="sidebar__section-label">PAINEL</div>
+        <nav aria-label="Navegação principal">
+          {navItems.map(item => (
+            <button
+              key={item.key}
+              className={`nav-item ${view === item.key ? 'active' : ''}`}
+              aria-current={view === item.key ? 'page' : undefined}
+              onClick={() => navigate(item.key)}
+            >
+              <Icon name={item.icon} size={19} />
+              <span>{item.label}</span>
+              {item.key !== 'overview' && (
+                <span className="nav-count">
+                  {item.key === 'transactions' ? data.transactions.length : item.key === 'debts' ? data.debts.length : data.goals.length}
+                </span>
+              )}
+            </button>
+          ))}
+        </nav>
+
+        <div className="sidebar__bottom">
+          <div className="account-card">
+            <span className="account-avatar">{user.email.slice(0, 1).toUpperCase()}</span>
+            <div>
+              <strong>{user.email}</strong>
+              <span>Conta ativa</span>
+            </div>
+          </div>
+          <button className="logout-button" onClick={logout}>
+            <Icon name="logout" size={18} />
+            Sair da conta
+          </button>
+        </div>
+      </aside>
+
+      <main className="workspace">
+        <header className="page-header">
+          <div className="page-header__left">
+            <button
+              className="menu-button"
+              aria-controls="navigation"
+              aria-expanded={menu}
+              onClick={() => setMenu(true)}
+              aria-label="Abrir menu"
+            >
+              <Icon name="menu" size={21} />
+            </button>
+            <div>
+              <span className="section-kicker">{view === 'overview' ? monthLabel : 'ZEUS FINANCE'}</span>
+              <h1>{titles[view]}</h1>
+              <p>{descriptions[view]}</p>
+            </div>
+          </div>
+          {view === 'overview' && (
+            <button className="primary page-header__action" onClick={() => navigate('transactions')}>
+              <Icon name="plus" size={18} />
+              Novo gasto
+            </button>
+          )}
+        </header>
+
+        {error && <p role="alert" className="alert alert--error">{error}</p>}
+
+        {view === 'overview' ? (
+          <div className="dashboard">
+            <section className="dashboard-hero">
+              <div className="dashboard-hero__main">
+                <div className="hero-icon"><Icon name="wallet" size={22} /></div>
+                <div>
+                  <span>Gastos neste mês</span>
+                  <strong>{money(dashboard.spent)}</strong>
+                  <p>{dashboard.monthly.length ? `${dashboard.monthly.length} lançamento${dashboard.monthly.length === 1 ? '' : 's'} em ${monthLabel.toLowerCase()}` : 'Nenhum gasto registrado neste mês'}</p>
+                </div>
+              </div>
+              <div className="dashboard-hero__aside">
+                <div>
+                  <span>Maior categoria</span>
+                  <strong>{dashboard.categoriesData[0] ? [...dashboard.categoriesData].sort((a, b) => b.total - a.total)[0].category : '—'}</strong>
+                </div>
+                <div>
+                  <span>Últimos registros</span>
+                  <strong>{data.transactions.length}</strong>
+                </div>
+              </div>
+            </section>
+
+            <section className="metrics-grid" aria-label="Resumo financeiro">
+              <MetricCard
+                label="Dívidas registradas"
+                value={money(dashboard.debt)}
+                detail={data.debts.length ? `${data.debts.length} dívida${data.debts.length === 1 ? '' : 's'} acompanhada${data.debts.length === 1 ? '' : 's'}` : 'Nenhuma dívida cadastrada'}
+                icon="debt"
+                tone="warning"
+              />
+              <MetricCard
+                label="Valor reservado"
+                value={money(dashboard.saved)}
+                detail={data.goals.length ? `${percent(dashboard.goalProgress)} do valor total das metas` : 'Crie uma meta para começar'}
+                icon="goal"
+                tone="accent"
+              />
+              <MetricCard
+                label="Metas em andamento"
+                value={String(data.goals.length)}
+                detail={dashboard.targets > 0 ? `Objetivo total de ${money(dashboard.targets)}` : 'Nenhum objetivo cadastrado'}
+                icon="goal"
+              />
+            </section>
+
+            <section className="dashboard-grid">
+              <article className="panel spending-panel">
+                <div className="panel__header">
+                  <div>
+                    <span className="panel__eyebrow">DISTRIBUIÇÃO</span>
+                    <h2>Gastos por categoria</h2>
+                  </div>
+                  <span className="period-chip"><Icon name="calendar" size={15} /> {monthLabel}</span>
+                </div>
+
+                {dashboard.spent === 0 ? (
+                  <div className="empty-block">
+                    <div className="empty-block__icon"><Icon name="wallet" size={23} /></div>
+                    <h3>Ainda não há gastos neste mês.</h3>
+                    <p>Adicione o primeiro lançamento para visualizar a distribuição por categoria.</p>
+                    <button className="secondary-button" onClick={() => navigate('transactions')}>
+                      Registrar gasto
+                    </button>
+                  </div>
+                ) : (
+                  <div className="spending-layout">
+                    <div
+                      className="donut"
+                      style={{
+                        background: `conic-gradient(${dashboard.categoriesData.map((item, index, items) => {
+                          const start = items.slice(0, index).reduce((sum, current) => sum + current.share, 0)
+                          const end = start + item.share
+                          return `${categoryColor[item.category]} ${start}% ${end}%`
+                        }).join(', ')})`,
+                      }}
+                      aria-label="Distribuição de gastos por categoria"
+                    >
+                      <div className="donut__center">
+                        <span>Total</span>
+                        <strong>{money(dashboard.spent)}</strong>
+                      </div>
+                    </div>
+
+                    <div className="category-list">
+                      {dashboard.categoriesData
+                        .sort((a, b) => b.total - a.total)
+                        .map(item => (
+                          <div className="category-row" key={item.category}>
+                            <span className="category-dot" style={{ background: categoryColor[item.category] }} />
+                            <div className="category-row__name">
+                              <strong>{item.category}</strong>
+                              <span>{percent(item.share)} do total</span>
+                            </div>
+                            <strong className="category-row__value">{money(item.total)}</strong>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </article>
+
+              <article className="panel debt-panel">
+                <div className="panel__header">
+                  <div>
+                    <span className="panel__eyebrow">COMPROMISSOS</span>
+                    <h2>Dívidas</h2>
+                  </div>
+                  <button className="link-button" onClick={() => navigate('debts')}>
+                    Ver todas <Icon name="arrow" size={16} />
+                  </button>
+                </div>
+
+                <div className="compact-list">
+                  {data.debts.slice(0, 4).map(entry => (
+                    <div className="compact-row" key={entry.id}>
+                      <span className="compact-row__icon compact-row__icon--debt"><Icon name="debt" size={17} /></span>
+                      <div>
+                        <strong>{entry.name}</strong>
+                        <span>Valor registrado</span>
+                      </div>
+                      <strong className="compact-row__value">{money(entry.value)}</strong>
+                    </div>
+                  ))}
+                  {!data.debts.length && (
+                    <div className="mini-empty">
+                      <span>Nenhuma dívida cadastrada.</span>
+                      <button className="link-button" onClick={() => navigate('debts')}>Adicionar dívida</button>
+                    </div>
+                  )}
+                </div>
+
+                {data.debts.length > 0 && (
+                  <div className="panel-total">
+                    <span>Total registrado</span>
+                    <strong>{money(dashboard.debt)}</strong>
+                  </div>
+                )}
+              </article>
+
+              <article className="panel goals-panel">
+                <div className="panel__header">
+                  <div>
+                    <span className="panel__eyebrow">PROGRESSO</span>
+                    <h2>Metas</h2>
+                  </div>
+                  <button className="link-button" onClick={() => navigate('goals')}>
+                    Ver metas <Icon name="arrow" size={16} />
+                  </button>
+                </div>
+
+                {data.goals.length ? (
+                  <div className="goal-overview">
+                    <div className="goal-overview__summary">
+                      <div>
+                        <span>Reservado</span>
+                        <strong>{money(dashboard.saved)}</strong>
+                      </div>
+                      <strong className="goal-overview__percent">{percent(dashboard.goalProgress)}</strong>
+                    </div>
+                    <div className="progress-track">
+                      <span style={{ width: percent(dashboard.goalProgress) }} />
+                    </div>
+                    <div className="goal-overview__footer">
+                      <span>Objetivo total</span>
+                      <strong>{money(dashboard.targets)}</strong>
+                    </div>
+
+                    <div className="goal-preview-list">
+                      {data.goals.slice(0, 3).map(goal => {
+                        const progress = goal.target > 0 ? (goal.saved / goal.target) * 100 : 0
+                        return (
+                          <div className="goal-preview" key={goal.id}>
+                            <div>
+                              <strong>{goal.name}</strong>
+                              <span>{money(goal.saved)} de {money(goal.target)}</span>
+                            </div>
+                            <span className="goal-preview__percent">{percent(progress)}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mini-empty mini-empty--tall">
+                    <div className="empty-block__icon"><Icon name="goal" size={21} /></div>
+                    <strong>Defina seu próximo objetivo.</strong>
+                    <span>Crie uma meta e acompanhe quanto já foi reservado.</span>
+                    <button className="secondary-button" onClick={() => navigate('goals')}>Criar meta</button>
+                  </div>
+                )}
+              </article>
+            </section>
+          </div>
+        ) : (
+          <div className="records-layout">
+            <section className="panel records-panel">
+              <div className="panel__header records-panel__header">
+                <div>
+                  <span className="panel__eyebrow">REGISTROS</span>
+                  <h2>{titles[view]} cadastrados</h2>
+                </div>
+                <span className="records-count">{data[view].length} {data[view].length === 1 ? 'item' : 'itens'}</span>
+              </div>
+
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Descrição</th>
+                      <th>{view === 'goals' ? 'Progresso' : 'Valor'}</th>
+                      <th className="table-action">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data[view].map(entry => (
+                      <tr key={entry.id}>
+                        <td>
+                          <div className="record-name">
+                            <span className={`record-icon record-icon--${view}`}>
+                              <Icon name={view === 'transactions' ? 'wallet' : view === 'debts' ? 'debt' : 'goal'} size={17} />
+                            </span>
+                            <div>
+                              <strong>{entry.name}</strong>
+                              <span>{view === 'transactions' ? entry.category : view === 'goals' ? `Alvo: ${money(entry.target)}` : 'Dívida registrada'}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          {view === 'goals' ? (
+                            <div className="table-progress">
+                              <strong>{money(entry.saved)}</strong>
+                              <span>{percent(entry.target > 0 ? (entry.saved / entry.target) * 100 : 0)}</span>
+                            </div>
+                          ) : (
+                            <strong className="table-value">{money(entry.value)}</strong>
+                          )}
+                        </td>
+                        <td className="table-action">
+                          <button
+                            className="icon-action icon-action--danger"
+                            disabled={busy}
+                            onClick={() => remove(view, entry.id)}
+                            aria-label={`Excluir ${entry.name}`}
+                          >
+                            <Icon name="trash" size={17} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {!data[view].length && (
+                      <tr>
+                        <td colSpan={3} className="table-empty">
+                          <div className="empty-block__icon">
+                            <Icon name={view === 'transactions' ? 'wallet' : view === 'debts' ? 'debt' : 'goal'} size={22} />
+                          </div>
+                          <strong>Nenhum registro por aqui.</strong>
+                          <span>Use o formulário ao lado para adicionar o primeiro.</span>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <aside className="panel record-form-panel">
+              <span className="panel__eyebrow">NOVO REGISTRO</span>
+              <h2>Adicionar {view === 'goals' ? 'meta' : view === 'debts' ? 'dívida' : 'gasto'}</h2>
+              <p>
+                {view === 'goals'
+                  ? 'Defina um objetivo e informe quanto já conseguiu reservar.'
+                  : view === 'debts'
+                    ? 'Registre o saldo atual para manter seus compromissos visíveis.'
+                    : 'Registre o gasto e escolha a categoria para acompanhar a distribuição.'}
+              </p>
+
+              <form key={view} onSubmit={add}>
+                <label>
+                  <span>Descrição</span>
+                  <input name="name" placeholder={view === 'goals' ? 'Ex.: Reserva de emergência' : view === 'debts' ? 'Ex.: Cartão de crédito' : 'Ex.: Mercado'} required maxLength={120} />
+                </label>
+
+                {view === 'transactions' && (
+                  <label>
+                    <span>Categoria</span>
+                    <select name="category">
+                      {categories.map(category => <option key={category}>{category}</option>)}
+                    </select>
+                  </label>
+                )}
+
+                <label>
+                  <span>{view === 'goals' ? 'Valor alvo' : 'Valor'}</span>
+                  <div className="money-input">
+                    <span>R$</span>
+                    <input name="value" type="number" min="0.01" max="100000000" step="0.01" placeholder="0,00" required />
+                  </div>
+                </label>
+
+                {view === 'goals' && (
+                  <label>
+                    <span>Valor já reservado</span>
+                    <div className="money-input">
+                      <span>R$</span>
+                      <input name="saved" type="number" min="0" max="100000000" step="0.01" defaultValue="0" required />
+                    </div>
+                  </label>
+                )}
+
+                <button className="primary primary--full" disabled={busy}>
+                  {busy ? 'Salvando…' : 'Salvar registro'}
+                  {!busy && <Icon name="arrow" size={17} />}
+                </button>
+              </form>
+
+              <div className="form-security">
+                <Icon name="shield" size={17} />
+                <span>O registro será salvo apenas na sua conta.</span>
+              </div>
+            </aside>
+          </div>
+        )}
+      </main>
+    </div>
+  )
 }
