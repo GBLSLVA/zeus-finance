@@ -10,15 +10,26 @@ type Entry = {
   value: number
   target: number
   saved: number
+  transactionDate: string
   createdAt: string
+  updatedAt: string
 }
 type Income = {
   id: number
   name: string
   type: 'salary' | 'extra'
   value: number
+  recurrence: 'monthly' | 'once'
+  activeFrom: string
+  activeUntil: string | null
+  active: boolean
   receivedAt: string
+  updatedAt: string
 }
+type EditState =
+  | { kind: Kind; entry: Entry }
+  | { kind: 'incomes'; entry: Income }
+  | null
 type User = { id: number; email: string }
 
 const titles: Record<View, string> = {
@@ -52,7 +63,7 @@ const money = (value: number) =>
 
 const percent = (value: number) => `${Math.round(Math.max(0, Math.min(100, value)))}%`
 
-function Icon({ name, size = 20 }: { name: 'overview' | 'income' | 'wallet' | 'debt' | 'goal' | 'logout' | 'plus' | 'menu' | 'close' | 'arrow' | 'trash' | 'shield' | 'calendar'; size?: number }) {
+function Icon({ name, size = 20 }: { name: 'overview' | 'income' | 'wallet' | 'debt' | 'goal' | 'logout' | 'plus' | 'menu' | 'close' | 'arrow' | 'edit' | 'trash' | 'shield' | 'calendar'; size?: number }) {
   const common = {
     width: size,
     height: size,
@@ -76,6 +87,7 @@ function Icon({ name, size = 20 }: { name: 'overview' | 'income' | 'wallet' | 'd
     menu: <><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h16" /></>,
     close: <><path d="M6 6l12 12" /><path d="M18 6L6 18" /></>,
     arrow: <><path d="M5 12h14" /><path d="m14 7 5 5-5 5" /></>,
+    edit: <><path d="M4 20h4l11-11-4-4L4 16v4Z" /><path d="m13.5 6.5 4 4" /></>,
     trash: <><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M7 7l1 13h8l1-13" /><path d="M10 11v5" /><path d="M14 11v5" /></>,
     shield: <><path d="M12 3 5 6v5c0 4.7 2.7 8 7 10 4.3-2 7-5.3 7-10V6l-7-3Z" /><path d="m9.5 12 1.7 1.7 3.6-4" /></>,
     calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M8 3v4" /><path d="M16 3v4" /><path d="M3 10h18" /></>,
@@ -123,6 +135,7 @@ export function App() {
     goals: [],
   })
   const [incomes, setIncomes] = useState<Income[]>([])
+  const [editing, setEditing] = useState<EditState>(null)
 
   const load = async () => {
     const [transactions, debts, goals, incomeEntries] = await Promise.all([
@@ -174,13 +187,14 @@ export function App() {
       setUser(null)
       setData({ transactions: [], debts: [], goals: [] })
       setIncomes([])
+      setEditing(null)
       setView('overview')
     } catch (e) {
       setError((e as Error).message)
     }
   }
 
-  async function add(event: FormEvent<HTMLFormElement>) {
+  async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (view === 'overview') return
     const element = event.currentTarget
@@ -189,29 +203,74 @@ export function App() {
     setError('')
     try {
       if (view === 'incomes') {
-        const income = await api.request<Income>('incomes', 'POST', {
+        const type = String(form.get('type')) as 'salary' | 'extra'
+        const date = String(form.get('date'))
+        const payload = {
           name: form.get('name'),
-          type: form.get('type'),
+          type,
           value: Number(form.get('value')),
-          receivedAt: form.get('receivedAt'),
-        })
-        setIncomes(current => [income, ...current])
+          receivedAt: date,
+          activeFrom: date,
+          activeUntil: form.get('activeUntil') || null,
+          active: form.get('active') === 'on',
+        }
+        const isEditing = editing?.kind === 'incomes'
+        const income = await api.request<Income>(
+          isEditing ? `incomes/${editing.entry.id}` : 'incomes',
+          isEditing ? 'PUT' : 'POST',
+          payload,
+        )
+        setIncomes(current =>
+          isEditing
+            ? current.map(entry => entry.id === income.id ? income : entry)
+            : [income, ...current],
+        )
       } else {
-        const entry = await api.request<Entry>(view, 'POST', {
+        const isEditing = editing?.kind === view
+        const payload = {
           name: form.get('name'),
           category: form.get('category'),
           value: Number(form.get('value')),
           target: Number(form.get('value')),
           saved: Number(form.get('saved') ?? 0),
-        })
-        setData(current => ({ ...current, [view]: [entry, ...current[view]] }))
+          transactionDate: form.get('transactionDate'),
+        }
+        const entry = await api.request<Entry>(
+          isEditing ? `${view}/${editing.entry.id}` : view,
+          isEditing ? 'PUT' : 'POST',
+          payload,
+        )
+        setData(current => ({
+          ...current,
+          [view]: isEditing
+            ? current[view].map(item => item.id === entry.id ? entry : item)
+            : [entry, ...current[view]],
+        }))
       }
+      setEditing(null)
       element.reset()
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setBusy(false)
     }
+  }
+
+  function startEdit(kind: Kind, entry: Entry): void
+  function startEdit(kind: 'incomes', entry: Income): void
+  function startEdit(kind: Kind | 'incomes', entry: Entry | Income) {
+    if (kind === 'incomes') {
+      setEditing({ kind, entry: entry as Income })
+    } else {
+      setEditing({ kind, entry: entry as Entry })
+    }
+    setError('')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function cancelEdit() {
+    setEditing(null)
+    setError('')
   }
 
   async function remove(kind: Kind | 'incomes', id: number) {
@@ -237,16 +296,21 @@ export function App() {
 
   const dashboard = useMemo(() => {
     const now = new Date()
-    const isCurrentMonth = (raw: string) => {
-      const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z'
-      const date = new Date(normalized)
-      return date.getUTCFullYear() === now.getUTCFullYear() && date.getUTCMonth() === now.getUTCMonth()
-    }
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const monthStart = `${monthKey}-01`
+    const monthEnd = `${monthKey}-31`
+    const belongsToCurrentMonth = (raw: string | null | undefined) => Boolean(raw && raw.slice(0, 7) === monthKey)
 
-    const monthly = data.transactions.filter(entry => isCurrentMonth(entry.createdAt))
+    const monthly = data.transactions.filter(entry => belongsToCurrentMonth(entry.transactionDate))
     const spent = monthly.reduce((total, entry) => total + entry.value, 0)
-    const salary = incomes.filter(entry => entry.type === 'salary').reduce((total, entry) => total + entry.value, 0)
-    const monthlyExtras = incomes.filter(entry => entry.type === 'extra' && isCurrentMonth(entry.receivedAt))
+    const activeSalaries = incomes.filter(entry =>
+      entry.type === 'salary'
+      && entry.active
+      && entry.activeFrom <= monthEnd
+      && (!entry.activeUntil || entry.activeUntil >= monthStart),
+    )
+    const salary = activeSalaries.reduce((total, entry) => total + entry.value, 0)
+    const monthlyExtras = incomes.filter(entry => entry.type === 'extra' && belongsToCurrentMonth(entry.receivedAt))
     const extras = monthlyExtras.reduce((total, entry) => total + entry.value, 0)
     const income = salary + extras
     const balance = income - spent
@@ -266,7 +330,22 @@ export function App() {
       }
     }).filter(item => item.total > 0)
 
-    return { monthly, spent, salary, monthlyExtras, extras, income, balance, debt, debtMonths, saved, targets, goalProgress, categoriesData }
+    return {
+      monthly,
+      spent,
+      activeSalaries,
+      salary,
+      monthlyExtras,
+      extras,
+      income,
+      balance,
+      debt,
+      debtMonths,
+      saved,
+      targets,
+      goalProgress,
+      categoriesData,
+    }
   }, [data, incomes])
 
   const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' })
@@ -276,6 +355,7 @@ export function App() {
   const navigate = (next: View) => {
     setView(next)
     setMenu(false)
+    setEditing(null)
     setError('')
   }
 
@@ -662,13 +742,23 @@ export function App() {
                         <td>
                           <div className="record-name">
                             <span className="record-icon record-icon--incomes"><Icon name="income" size={17} /></span>
-                            <div><strong>{entry.name}</strong><span>{entry.type === 'salary' ? 'Receita recorrente mensal' : 'Receita extraordinária'}</span></div>
+                            <div><strong>{entry.name}</strong><span>{entry.type === 'salary' ? `Mensal • ${entry.active ? 'ativa' : 'inativa'}` : 'Receita extraordinária'}</span></div>
                           </div>
                         </td>
-                        <td><span className={`income-type income-type--${entry.type}`}>{entry.type === 'salary' ? 'Salário' : 'Extra'}</span>{entry.type === 'extra' && <small className="income-date">{new Date(entry.receivedAt.replace(' ', 'T') + 'Z').toLocaleDateString('pt-BR')}</small>}</td>
+                        <td>
+                          <span className={`income-type income-type--${entry.type}`}>{entry.type === 'salary' ? 'Salário' : 'Extra'}</span>
+                          <small className="income-date">
+                            {entry.type === 'salary'
+                              ? `${new Date(entry.activeFrom + 'T12:00:00').toLocaleDateString('pt-BR')} → ${entry.activeUntil ? new Date(entry.activeUntil + 'T12:00:00').toLocaleDateString('pt-BR') : 'atual'}`
+                              : new Date(entry.receivedAt.replace(' ', 'T') + 'Z').toLocaleDateString('pt-BR')}
+                          </small>
+                        </td>
                         <td><strong className="table-value">{money(entry.value)}</strong></td>
                         <td className="table-action">
-                          <button className="icon-action icon-action--danger" disabled={busy} onClick={() => remove('incomes', entry.id)} aria-label={`Excluir ${entry.name}`}><Icon name="trash" size={17} /></button>
+                          <div className="table-actions">
+                            <button className="icon-action" disabled={busy} onClick={() => startEdit('incomes', entry)} aria-label={`Editar ${entry.name}`}><Icon name="edit" size={17} /></button>
+                            <button className="icon-action icon-action--danger" disabled={busy} onClick={() => remove('incomes', entry.id)} aria-label={`Excluir ${entry.name}`}><Icon name="trash" size={17} /></button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -681,15 +771,20 @@ export function App() {
             </section>
 
             <aside className="panel record-form-panel">
-              <span className="panel__eyebrow">NOVA RECEITA</span>
-              <h2>Adicionar entrada</h2>
-              <p>Salários são considerados recorrentes todos os meses. Receitas extras entram apenas no mês da data informada.</p>
-              <form key={view} onSubmit={add}>
-                <label><span>Descrição</span><input name="name" placeholder="Ex.: Salário empresa / Freelance" required maxLength={120} /></label>
-                <label><span>Tipo de receita</span><select name="type"><option value="salary">Salário mensal</option><option value="extra">Renda extra</option></select></label>
-                <label><span>Valor</span><div className="money-input"><span>R$</span><input name="value" type="number" min="0.01" max="100000000" step="0.01" placeholder="0,00" required /></div></label>
-                <label><span>Data de referência</span><input name="receivedAt" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required /></label>
-                <button className="primary primary--full" disabled={busy}>{busy ? 'Salvando…' : 'Salvar receita'}{!busy && <Icon name="arrow" size={17} />}</button>
+              <span className="panel__eyebrow">{editing?.kind === 'incomes' ? 'EDITAR RECEITA' : 'NOVA RECEITA'}</span>
+              <h2>{editing?.kind === 'incomes' ? 'Atualizar entrada' : 'Adicionar entrada'}</h2>
+              <p>Salários são recorrentes durante o período de vigência. Receitas extras entram somente no mês informado.</p>
+              <form key={`incomes-${editing?.kind === 'incomes' ? editing.entry.id : 'new'}`} onSubmit={save}>
+                <label><span>Descrição</span><input name="name" defaultValue={editing?.kind === 'incomes' ? editing.entry.name : ''} placeholder="Ex.: Salário empresa / Freelance" required maxLength={120} /></label>
+                <label><span>Tipo de receita</span><select name="type" defaultValue={editing?.kind === 'incomes' ? editing.entry.type : 'salary'}><option value="salary">Salário mensal</option><option value="extra">Renda extra</option></select></label>
+                <label><span>Valor</span><div className="money-input"><span>R$</span><input name="value" type="number" min="0.01" max="100000000" step="0.01" defaultValue={editing?.kind === 'incomes' ? editing.entry.value : undefined} placeholder="0,00" required /></div></label>
+                <label><span>Data de referência / início</span><input name="date" type="date" defaultValue={editing?.kind === 'incomes' ? (editing.entry.type === 'salary' ? editing.entry.activeFrom : editing.entry.receivedAt.slice(0, 10)) : new Date().toISOString().slice(0, 10)} required /></label>
+                <label><span>Vigente até (opcional para salário)</span><input name="activeUntil" type="date" defaultValue={editing?.kind === 'incomes' ? editing.entry.activeUntil ?? '' : ''} /></label>
+                <label className="check-field"><input name="active" type="checkbox" defaultChecked={editing?.kind === 'incomes' ? editing.entry.active : true} /><span>Receita ativa</span></label>
+                <div className="form-actions">
+                  <button className="primary primary--full" disabled={busy}>{busy ? 'Salvando…' : editing?.kind === 'incomes' ? 'Atualizar receita' : 'Salvar receita'}{!busy && <Icon name="arrow" size={17} />}</button>
+                  {editing?.kind === 'incomes' && <button type="button" className="secondary-button" onClick={cancelEdit}>Cancelar edição</button>}
+                </div>
               </form>
               <div className="form-security"><Icon name="shield" size={17} /><span>O registro será salvo apenas na sua conta.</span></div>
             </aside>
@@ -724,7 +819,7 @@ export function App() {
                             </span>
                             <div>
                               <strong>{entry.name}</strong>
-                              <span>{view === 'transactions' ? entry.category : view === 'goals' ? `Alvo: ${money(entry.target)}` : 'Dívida registrada'}</span>
+                              <span>{view === 'transactions' ? `${entry.category} • ${new Date(entry.transactionDate + 'T12:00:00').toLocaleDateString('pt-BR')}` : view === 'goals' ? `Alvo: ${money(entry.target)}` : 'Dívida registrada'}</span>
                             </div>
                           </div>
                         </td>
@@ -739,14 +834,24 @@ export function App() {
                           )}
                         </td>
                         <td className="table-action">
-                          <button
-                            className="icon-action icon-action--danger"
-                            disabled={busy}
-                            onClick={() => remove(view, entry.id)}
-                            aria-label={`Excluir ${entry.name}`}
-                          >
-                            <Icon name="trash" size={17} />
-                          </button>
+                          <div className="table-actions">
+                            <button
+                              className="icon-action"
+                              disabled={busy}
+                              onClick={() => startEdit(view, entry)}
+                              aria-label={`Editar ${entry.name}`}
+                            >
+                              <Icon name="edit" size={17} />
+                            </button>
+                            <button
+                              className="icon-action icon-action--danger"
+                              disabled={busy}
+                              onClick={() => remove(view, entry.id)}
+                              aria-label={`Excluir ${entry.name}`}
+                            >
+                              <Icon name="trash" size={17} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -767,8 +872,8 @@ export function App() {
             </section>
 
             <aside className="panel record-form-panel">
-              <span className="panel__eyebrow">NOVO REGISTRO</span>
-              <h2>Adicionar {view === 'goals' ? 'meta' : view === 'debts' ? 'dívida' : 'gasto'}</h2>
+              <span className="panel__eyebrow">{editing?.kind === view ? 'EDITAR REGISTRO' : 'NOVO REGISTRO'}</span>
+              <h2>{editing?.kind === view ? 'Atualizar' : 'Adicionar'} {view === 'goals' ? 'meta' : view === 'debts' ? 'dívida' : 'gasto'}</h2>
               <p>
                 {view === 'goals'
                   ? 'Defina um objetivo e informe quanto já conseguiu reservar.'
@@ -777,16 +882,16 @@ export function App() {
                     : 'Registre o gasto e escolha a categoria para acompanhar a distribuição.'}
               </p>
 
-              <form key={view} onSubmit={add}>
+              <form key={`${view}-${editing?.kind === view ? editing.entry.id : 'new'}`} onSubmit={save}>
                 <label>
                   <span>Descrição</span>
-                  <input name="name" placeholder={view === 'goals' ? 'Ex.: Reserva de emergência' : view === 'debts' ? 'Ex.: Cartão de crédito' : 'Ex.: Mercado'} required maxLength={120} />
+                  <input name="name" defaultValue={editing?.kind === view ? editing.entry.name : ''} placeholder={view === 'goals' ? 'Ex.: Reserva de emergência' : view === 'debts' ? 'Ex.: Cartão de crédito' : 'Ex.: Mercado'} required maxLength={120} />
                 </label>
 
                 {view === 'transactions' && (
                   <label>
                     <span>Categoria</span>
-                    <select name="category">
+                    <select name="category" defaultValue={editing?.kind === 'transactions' ? editing.entry.category : categories[0]}>
                       {categories.map(category => <option key={category}>{category}</option>)}
                     </select>
                   </label>
@@ -796,24 +901,34 @@ export function App() {
                   <span>{view === 'goals' ? 'Valor alvo' : 'Valor'}</span>
                   <div className="money-input">
                     <span>R$</span>
-                    <input name="value" type="number" min="0.01" max="100000000" step="0.01" placeholder="0,00" required />
+                    <input name="value" type="number" min="0.01" max="100000000" step="0.01" defaultValue={editing?.kind === view ? (view === 'goals' ? editing.entry.target : editing.entry.value) : undefined} placeholder="0,00" required />
                   </div>
                 </label>
+
+                {view === 'transactions' && (
+                  <label>
+                    <span>Data do gasto</span>
+                    <input name="transactionDate" type="date" defaultValue={editing?.kind === 'transactions' ? editing.entry.transactionDate : new Date().toISOString().slice(0, 10)} required />
+                  </label>
+                )}
 
                 {view === 'goals' && (
                   <label>
                     <span>Valor já reservado</span>
                     <div className="money-input">
                       <span>R$</span>
-                      <input name="saved" type="number" min="0" max="100000000" step="0.01" defaultValue="0" required />
+                      <input name="saved" type="number" min="0" max="100000000" step="0.01" defaultValue={editing?.kind === 'goals' ? editing.entry.saved : 0} required />
                     </div>
                   </label>
                 )}
 
-                <button className="primary primary--full" disabled={busy}>
-                  {busy ? 'Salvando…' : 'Salvar registro'}
-                  {!busy && <Icon name="arrow" size={17} />}
-                </button>
+                <div className="form-actions">
+                  <button className="primary primary--full" disabled={busy}>
+                    {busy ? 'Salvando…' : editing?.kind === view ? 'Atualizar registro' : 'Salvar registro'}
+                    {!busy && <Icon name="arrow" size={17} />}
+                  </button>
+                  {editing?.kind === view && <button type="button" className="secondary-button" onClick={cancelEdit}>Cancelar edição</button>}
+                </div>
               </form>
 
               <div className="form-security">
