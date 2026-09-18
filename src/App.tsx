@@ -261,7 +261,7 @@ export function App() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (view === 'overview') return
+    if (view === 'overview' || view === 'budgets') return
     const element = event.currentTarget
     const form = new FormData(element)
     setBusy(true)
