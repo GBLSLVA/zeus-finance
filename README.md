@@ -17,6 +17,9 @@ Funcionalidades principais:
 - Dívidas estruturadas com credor, valor original, saldo atual, juros, parcelas, vencimento e status.
 - Pagamentos parciais de dívidas com histórico, baixa automática do saldo e atualização das parcelas pagas.
 - Distribuição de gastos por categoria.
+- Orçamento mensal por categoria, com limite, gasto, restante e percentual utilizado.
+- Navegação entre meses no dashboard e na área de orçamentos.
+- Histórico comparativo dos últimos 6 meses com receitas, gastos e saldo.
 - Isolamento dos dados por usuário autenticado.
 - Banco SQLite local com migrations versionadas.
 - Interface responsiva para desktop e celular.
@@ -45,6 +48,9 @@ Funcionalidades principais:
 - **Pagamento de dívida:** reduz o saldo atual e pode contar como parcela paga; excluir um pagamento recalcula saldo e parcelas.
 - **Status da dívida:** muda automaticamente para `paid` quando o saldo chega a zero.
 - **Metas:** progresso calculado pelo valor reservado em relação ao valor alvo.
+- **Orçamento mensal:** cada categoria pode ter um limite independente para cada mês.
+- **Uso do orçamento:** calculado apenas sobre categorias que possuem limite definido, evitando comparar orçamento parcial com gastos sem limite.
+- **Histórico mensal:** receitas e gastos são recalculados pela data financeira de cada lançamento e pela vigência histórica dos salários.
 
 ## Banco e migrations
 
@@ -59,7 +65,8 @@ Migrações atuais:
 1. esquema inicial;
 2. datas financeiras e auditoria básica em lançamentos;
 3. recorrência, vigência e status de receitas;
-4. dívidas estruturadas e histórico de pagamentos, com migração automática das dívidas antigas.
+4. dívidas estruturadas e histórico de pagamentos, com migração automática das dívidas antigas;
+5. orçamentos mensais por categoria.
 
 Bases criadas por versões anteriores são atualizadas automaticamente ao iniciar o servidor.
 
@@ -122,7 +129,8 @@ A suíte cobre atualmente:
 - receitas recorrentes e extras;
 - persistência;
 - proteção de origem;
-- migração de uma base antiga sem perda dos registros principais.
+- migração de uma base antiga sem perda dos registros principais;
+- criação, atualização, listagem, remoção e isolamento de orçamentos mensais.
 
 ## Build
 
@@ -159,9 +167,7 @@ Valores financeiros são armazenados em centavos inteiros.
 
 Prioridades seguintes:
 
-- orçamento mensal por categoria;
 - movimentações de metas;
-- histórico por mês;
 - gastos recorrentes;
 - categorias personalizadas;
 - exportação CSV/PDF;
