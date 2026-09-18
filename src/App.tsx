@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import { api } from './api'
 
 type Kind = 'transactions' | 'debts' | 'goals'
-type View = Kind | 'incomes' | 'overview'
+type View = Kind | 'incomes' | 'budgets' | 'overview'
 type Entry = {
   id: number
   name: string
@@ -34,6 +34,14 @@ type DebtPayment = {
   countsAsInstallment: boolean
   createdAt: string
 }
+type Budget = {
+  id: number
+  month: string
+  category: (typeof categories)[number]
+  limit: number
+  createdAt: string
+  updatedAt: string
+}
 type Income = {
   id: number
   name: string
@@ -55,6 +63,7 @@ type User = { id: number; email: string }
 const titles: Record<View, string> = {
   overview: 'Visão geral',
   incomes: 'Receitas',
+  budgets: 'Orçamentos',
   transactions: 'Gastos',
   debts: 'Dívidas',
   goals: 'Metas',
@@ -63,6 +72,7 @@ const titles: Record<View, string> = {
 const descriptions: Record<View, string> = {
   overview: 'Receitas, gastos, dívidas e metas no mesmo panorama.',
   incomes: 'Cadastre seu salário mensal e todas as rendas extras.',
+  budgets: 'Defina limites mensais por categoria e acompanhe o consumo.',
   transactions: 'Acompanhe para onde o seu dinheiro está indo.',
   debts: 'Organize os valores que ainda precisam ser pagos.',
   goals: 'Transforme objetivos em progresso visível.',
@@ -81,9 +91,27 @@ const categoryColor: Record<(typeof categories)[number], string> = {
 const money = (value: number) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
+const currentMonthKey = () => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+const shiftMonthKey = (monthKey: string, offset: number) => {
+  const [year, month] = monthKey.split('-').map(Number)
+  const date = new Date(year, month - 1 + offset, 1)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+const formatMonth = (monthKey: string) => {
+  const [year, month] = monthKey.split('-').map(Number)
+  return new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' })
+    .format(new Date(year, month - 1, 1))
+    .replace(/^./, letter => letter.toUpperCase())
+}
+
 const percent = (value: number) => `${Math.round(Math.max(0, Math.min(100, value)))}%`
 
-function Icon({ name, size = 20 }: { name: 'overview' | 'income' | 'wallet' | 'debt' | 'goal' | 'logout' | 'plus' | 'menu' | 'close' | 'arrow' | 'edit' | 'trash' | 'shield' | 'calendar'; size?: number }) {
+function Icon({ name, size = 20 }: { name: 'overview' | 'income' | 'budget' | 'wallet' | 'debt' | 'goal' | 'logout' | 'plus' | 'menu' | 'close' | 'arrow' | 'edit' | 'trash' | 'shield' | 'calendar'; size?: number }) {
   const common = {
     width: size,
     height: size,
@@ -99,6 +127,7 @@ function Icon({ name, size = 20 }: { name: 'overview' | 'income' | 'wallet' | 'd
   const paths: Record<typeof name, ReactNode> = {
     overview: <><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="5" rx="2" /><rect x="14" y="12" width="7" height="9" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /></>,
     income: <><path d="M12 3v18" /><path d="m7 8 5-5 5 5" /><path d="M5 14h14" /><path d="M5 18h14" /></>,
+    budget: <><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h10" /><circle cx="18" cy="18" r="3" /></>,
     wallet: <><path d="M4 7.5h13.5A2.5 2.5 0 0 1 20 10v7.5A2.5 2.5 0 0 1 17.5 20h-13A2.5 2.5 0 0 1 2 17.5v-11A2.5 2.5 0 0 1 4.5 4H17v3.5" /><path d="M15.5 12h4.5v4h-4.5a2 2 0 1 1 0-4Z" /></>,
     debt: <><rect x="3" y="5" width="18" height="14" rx="3" /><path d="M3 10h18" /><path d="M7 15h4" /></>,
     goal: <><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="4" /><path d="M12 4V2" /><path d="M20 12h2" /></>,
@@ -126,7 +155,7 @@ function MetricCard({
   label: string
   value: string
   detail: string
-  icon: 'income' | 'wallet' | 'debt' | 'goal'
+  icon: 'income' | 'budget' | 'wallet' | 'debt' | 'goal'
   tone?: 'default' | 'accent' | 'warning'
 }) {
   return (
@@ -158,6 +187,8 @@ export function App() {
   const [editing, setEditing] = useState<EditState>(null)
   const [selectedDebtId, setSelectedDebtId] = useState<number | null>(null)
   const [debtPayments, setDebtPayments] = useState<DebtPayment[]>([])
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthKey())
+  const [budgets, setBudgets] = useState<Budget[]>([])
 
   const load = async () => {
     const [transactions, debts, goals, incomeEntries] = await Promise.all([
@@ -183,6 +214,13 @@ export function App() {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (!user) return
+    api.request<Budget[]>(`budgets?month=${selectedMonth}`)
+      .then(setBudgets)
+      .catch(e => setError((e as Error).message))
+  }, [user, selectedMonth])
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -212,6 +250,8 @@ export function App() {
       setEditing(null)
       setSelectedDebtId(null)
       setDebtPayments([])
+      setBudgets([])
+      setSelectedMonth(currentMonthKey())
       setView('overview')
     } catch (e) {
       setError((e as Error).message)
@@ -317,6 +357,44 @@ export function App() {
     setError('')
   }
 
+  async function saveBudget(event: FormEvent<HTMLFormElement>, category: (typeof categories)[number]) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    setBusy(true)
+    setError('')
+    try {
+      const budget = await api.request<Budget>('budgets', 'POST', {
+        month: selectedMonth,
+        category,
+        limit: Number(form.get('limit')),
+      })
+      setBudgets(current => {
+        const exists = current.some(item => item.id === budget.id || item.category === category)
+        return exists
+          ? current.map(item => item.id === budget.id || item.category === category ? budget : item)
+          : [...current, budget]
+      })
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeBudget(id: number) {
+    if (!window.confirm('Remover este limite mensal?')) return
+    setBusy(true)
+    setError('')
+    try {
+      await api.request(`budgets/${id}`, 'DELETE')
+      setBudgets(current => current.filter(item => item.id !== id))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function openDebtPayments(debtId: number) {
     setBusy(true)
     setError('')
@@ -402,22 +480,23 @@ export function App() {
   }
 
   const dashboard = useMemo(() => {
-    const now = new Date()
-    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const monthKey = selectedMonth
     const monthStart = `${monthKey}-01`
     const monthEnd = `${monthKey}-31`
-    const belongsToCurrentMonth = (raw: string | null | undefined) => Boolean(raw && raw.slice(0, 7) === monthKey)
+    const belongsToMonth = (raw: string | null | undefined) => Boolean(raw && raw.slice(0, 7) === monthKey)
 
-    const monthly = data.transactions.filter(entry => belongsToCurrentMonth(entry.transactionDate))
+    const monthly = data.transactions.filter(entry => belongsToMonth(entry.transactionDate))
     const spent = monthly.reduce((total, entry) => total + entry.value, 0)
     const activeSalaries = incomes.filter(entry =>
       entry.type === 'salary'
-      && entry.active
       && entry.activeFrom <= monthEnd
-      && (!entry.activeUntil || entry.activeUntil >= monthStart),
+      && (
+        (entry.activeUntil && entry.activeUntil >= monthStart)
+        || (!entry.activeUntil && entry.active)
+      ),
     )
     const salary = activeSalaries.reduce((total, entry) => total + entry.value, 0)
-    const monthlyExtras = incomes.filter(entry => entry.type === 'extra' && belongsToCurrentMonth(entry.receivedAt))
+    const monthlyExtras = incomes.filter(entry => entry.type === 'extra' && belongsToMonth(entry.receivedAt))
     const extras = monthlyExtras.reduce((total, entry) => total + entry.value, 0)
     const income = salary + extras
     const balance = income - spent
@@ -440,6 +519,25 @@ export function App() {
         share: spent > 0 ? (total / spent) * 100 : 0,
       }
     }).filter(item => item.total > 0)
+    const budgetData = categories.map(category => {
+      const budget = budgets.find(item => item.category === category)
+      const spentInCategory = monthly
+        .filter(entry => entry.category === category)
+        .reduce((sum, entry) => sum + entry.value, 0)
+      const limit = budget?.limit ?? 0
+      return {
+        category,
+        budget,
+        limit,
+        spent: spentInCategory,
+        remaining: limit - spentInCategory,
+        usage: limit > 0 ? (spentInCategory / limit) * 100 : 0,
+      }
+    })
+    const budgetTotal = budgetData.reduce((total, item) => total + item.limit, 0)
+    const budgetedSpent = budgetData.filter(item => item.limit > 0).reduce((total, item) => total + item.spent, 0)
+    const budgetRemaining = budgetTotal - budgetedSpent
+    const budgetUsage = budgetTotal > 0 ? (budgetedSpent / budgetTotal) * 100 : 0
 
     return {
       monthly,
@@ -459,12 +557,39 @@ export function App() {
       targets,
       goalProgress,
       categoriesData,
+      budgetData,
+      budgetTotal,
+      budgetedSpent,
+      budgetRemaining,
+      budgetUsage,
     }
-  }, [data, incomes])
+  }, [data, incomes, budgets, selectedMonth])
 
-  const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' })
-    .format(new Date())
-    .replace(/^./, letter => letter.toUpperCase())
+  const historyData = useMemo(() => {
+    return Array.from({ length: 6 }, (_, index) => shiftMonthKey(selectedMonth, index - 5)).map(monthKey => {
+      const monthStart = `${monthKey}-01`
+      const monthEnd = `${monthKey}-31`
+      const expenses = data.transactions
+        .filter(entry => entry.transactionDate?.slice(0, 7) === monthKey)
+        .reduce((total, entry) => total + entry.value, 0)
+      const salaries = incomes
+        .filter(entry =>
+          entry.type === 'salary'
+          && entry.activeFrom <= monthEnd
+          && ((entry.activeUntil && entry.activeUntil >= monthStart) || (!entry.activeUntil && entry.active)),
+        )
+        .reduce((total, entry) => total + entry.value, 0)
+      const extras = incomes
+        .filter(entry => entry.type === 'extra' && entry.receivedAt?.slice(0, 7) === monthKey)
+        .reduce((total, entry) => total + entry.value, 0)
+      const income = salaries + extras
+      return { monthKey, income, expenses, balance: income - expenses }
+    })
+  }, [data.transactions, incomes, selectedMonth])
+
+  const historyMax = Math.max(1, ...historyData.flatMap(item => [item.income, item.expenses]))
+
+  const monthLabel = formatMonth(selectedMonth)
 
   const navigate = (next: View) => {
     setView(next)
@@ -553,9 +678,10 @@ export function App() {
     )
   }
 
-  const navItems: Array<{ key: View; label: string; icon: 'overview' | 'income' | 'wallet' | 'debt' | 'goal' }> = [
+  const navItems: Array<{ key: View; label: string; icon: 'overview' | 'income' | 'budget' | 'wallet' | 'debt' | 'goal' }> = [
     { key: 'overview', label: 'Visão geral', icon: 'overview' },
     { key: 'incomes', label: 'Receitas', icon: 'income' },
+    { key: 'budgets', label: 'Orçamentos', icon: 'budget' },
     { key: 'transactions', label: 'Gastos', icon: 'wallet' },
     { key: 'debts', label: 'Dívidas', icon: 'debt' },
     { key: 'goals', label: 'Metas', icon: 'goal' },
@@ -590,7 +716,7 @@ export function App() {
               <span>{item.label}</span>
               {item.key !== 'overview' && (
                 <span className="nav-count">
-                  {item.key === 'incomes' ? incomes.length : item.key === 'transactions' ? data.transactions.length : item.key === 'debts' ? data.debts.length : data.goals.length}
+                  {item.key === 'incomes' ? incomes.length : item.key === 'budgets' ? budgets.length : item.key === 'transactions' ? data.transactions.length : item.key === 'debts' ? data.debts.length : data.goals.length}
                 </span>
               )}
             </button>
