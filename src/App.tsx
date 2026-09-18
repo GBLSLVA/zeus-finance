@@ -314,10 +314,6 @@ export function App() {
 
   function cancelEdit() {
     setEditing(null)
-    if (next !== 'debts') {
-      setSelectedDebtId(null)
-      setDebtPayments([])
-    }
     setError('')
   }
 
@@ -474,6 +470,10 @@ export function App() {
     setView(next)
     setMenu(false)
     setEditing(null)
+    if (next !== 'debts') {
+      setSelectedDebtId(null)
+      setDebtPayments([])
+    }
     setError('')
   }
 
@@ -1071,11 +1071,11 @@ export function App() {
                         <td>
                           <div className="record-name">
                             <span className={`record-icon record-icon--${view}`}>
-                              <Icon name={view === 'transactions' ? 'wallet' : view === 'debts' ? 'debt' : 'goal'} size={17} />
+                              <Icon name={view === 'transactions' ? 'wallet' : 'goal'} size={17} />
                             </span>
                             <div>
                               <strong>{entry.name}</strong>
-                              <span>{view === 'transactions' ? `${entry.category} • ${new Date(entry.transactionDate + 'T12:00:00').toLocaleDateString('pt-BR')}` : view === 'goals' ? `Alvo: ${money(entry.target)}` : 'Dívida registrada'}</span>
+                              <span>{view === 'transactions' ? `${entry.category} • ${new Date(entry.transactionDate + 'T12:00:00').toLocaleDateString('pt-BR')}` : `Alvo: ${money(entry.target)}`}</span>
                             </div>
                           </div>
                         </td>
@@ -1115,7 +1115,7 @@ export function App() {
                       <tr>
                         <td colSpan={3} className="table-empty">
                           <div className="empty-block__icon">
-                            <Icon name={view === 'transactions' ? 'wallet' : view === 'debts' ? 'debt' : 'goal'} size={22} />
+                            <Icon name={view === 'transactions' ? 'wallet' : 'goal'} size={22} />
                           </div>
                           <strong>Nenhum registro por aqui.</strong>
                           <span>Use o formulário ao lado para adicionar o primeiro.</span>
@@ -1129,19 +1129,17 @@ export function App() {
 
             <aside className="panel record-form-panel">
               <span className="panel__eyebrow">{editing?.kind === view ? 'EDITAR REGISTRO' : 'NOVO REGISTRO'}</span>
-              <h2>{editing?.kind === view ? 'Atualizar' : 'Adicionar'} {view === 'goals' ? 'meta' : view === 'debts' ? 'dívida' : 'gasto'}</h2>
+              <h2>{editing?.kind === view ? 'Atualizar' : 'Adicionar'} {view === 'goals' ? 'meta' : 'gasto'}</h2>
               <p>
                 {view === 'goals'
                   ? 'Defina um objetivo e informe quanto já conseguiu reservar.'
-                  : view === 'debts'
-                    ? 'Registre o saldo atual para manter seus compromissos visíveis.'
-                    : 'Registre o gasto e escolha a categoria para acompanhar a distribuição.'}
+                  : 'Registre o gasto e escolha a categoria para acompanhar a distribuição.'}
               </p>
 
               <form key={`${view}-${editing?.kind === view ? editing.entry.id : 'new'}`} onSubmit={save}>
                 <label>
                   <span>Descrição</span>
-                  <input name="name" defaultValue={editing?.kind === view ? editing.entry.name : ''} placeholder={view === 'goals' ? 'Ex.: Reserva de emergência' : view === 'debts' ? 'Ex.: Cartão de crédito' : 'Ex.: Mercado'} required maxLength={120} />
+                  <input name="name" defaultValue={editing?.kind === view ? editing.entry.name : ''} placeholder={view === 'goals' ? 'Ex.: Reserva de emergência' : 'Ex.: Mercado'} required maxLength={120} />
                 </label>
 
                 {view === 'transactions' && (
