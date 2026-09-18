@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import { api } from './api'
 
 type Kind = 'transactions' | 'debts' | 'goals'
-type View = Kind | 'overview'
+type View = Kind | 'incomes' | 'overview'
 type Entry = {
   id: number
   name: string
@@ -12,17 +12,26 @@ type Entry = {
   saved: number
   createdAt: string
 }
+type Income = {
+  id: number
+  name: string
+  type: 'salary' | 'extra'
+  value: number
+  receivedAt: string
+}
 type User = { id: number; email: string }
 
 const titles: Record<View, string> = {
   overview: 'Visão geral',
+  incomes: 'Receitas',
   transactions: 'Gastos',
   debts: 'Dívidas',
   goals: 'Metas',
 }
 
 const descriptions: Record<View, string> = {
-  overview: 'Seu panorama financeiro em um só lugar.',
+  overview: 'Receitas, gastos, dívidas e metas no mesmo panorama.',
+  incomes: 'Cadastre seu salário mensal e todas as rendas extras.',
   transactions: 'Acompanhe para onde o seu dinheiro está indo.',
   debts: 'Organize os valores que ainda precisam ser pagos.',
   goals: 'Transforme objetivos em progresso visível.',
@@ -43,7 +52,7 @@ const money = (value: number) =>
 
 const percent = (value: number) => `${Math.round(Math.max(0, Math.min(100, value)))}%`
 
-function Icon({ name, size = 20 }: { name: 'overview' | 'wallet' | 'debt' | 'goal' | 'logout' | 'plus' | 'menu' | 'close' | 'arrow' | 'trash' | 'shield' | 'calendar'; size?: number }) {
+function Icon({ name, size = 20 }: { name: 'overview' | 'income' | 'wallet' | 'debt' | 'goal' | 'logout' | 'plus' | 'menu' | 'close' | 'arrow' | 'trash' | 'shield' | 'calendar'; size?: number }) {
   const common = {
     width: size,
     height: size,
@@ -58,6 +67,7 @@ function Icon({ name, size = 20 }: { name: 'overview' | 'wallet' | 'debt' | 'goa
 
   const paths: Record<typeof name, ReactNode> = {
     overview: <><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="5" rx="2" /><rect x="14" y="12" width="7" height="9" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /></>,
+    income: <><path d="M12 3v18" /><path d="m7 8 5-5 5 5" /><path d="M5 14h14" /><path d="M5 18h14" /></>,
     wallet: <><path d="M4 7.5h13.5A2.5 2.5 0 0 1 20 10v7.5A2.5 2.5 0 0 1 17.5 20h-13A2.5 2.5 0 0 1 2 17.5v-11A2.5 2.5 0 0 1 4.5 4H17v3.5" /><path d="M15.5 12h4.5v4h-4.5a2 2 0 1 1 0-4Z" /></>,
     debt: <><rect x="3" y="5" width="18" height="14" rx="3" /><path d="M3 10h18" /><path d="M7 15h4" /></>,
     goal: <><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="4" /><path d="M12 4V2" /><path d="M20 12h2" /></>,
@@ -84,7 +94,7 @@ function MetricCard({
   label: string
   value: string
   detail: string
-  icon: 'wallet' | 'debt' | 'goal'
+  icon: 'income' | 'wallet' | 'debt' | 'goal'
   tone?: 'default' | 'accent' | 'warning'
 }) {
   return (
@@ -112,14 +122,17 @@ export function App() {
     debts: [],
     goals: [],
   })
+  const [incomes, setIncomes] = useState<Income[]>([])
 
   const load = async () => {
-    const [transactions, debts, goals] = await Promise.all([
+    const [transactions, debts, goals, incomeEntries] = await Promise.all([
       api.request<Entry[]>('transactions'),
       api.request<Entry[]>('debts'),
       api.request<Entry[]>('goals'),
+      api.request<Income[]>('incomes'),
     ])
     setData({ transactions, debts, goals })
+    setIncomes(incomeEntries)
   }
 
   useEffect(() => {
@@ -160,6 +173,7 @@ export function App() {
       await api.request('logout', 'POST')
       setUser(null)
       setData({ transactions: [], debts: [], goals: [] })
+      setIncomes([])
       setView('overview')
     } catch (e) {
       setError((e as Error).message)
@@ -174,14 +188,24 @@ export function App() {
     setBusy(true)
     setError('')
     try {
-      const entry = await api.request<Entry>(view, 'POST', {
-        name: form.get('name'),
-        category: form.get('category'),
-        value: Number(form.get('value')),
-        target: Number(form.get('value')),
-        saved: Number(form.get('saved') ?? 0),
-      })
-      setData(current => ({ ...current, [view]: [entry, ...current[view]] }))
+      if (view === 'incomes') {
+        const income = await api.request<Income>('incomes', 'POST', {
+          name: form.get('name'),
+          type: form.get('type'),
+          value: Number(form.get('value')),
+          receivedAt: form.get('receivedAt'),
+        })
+        setIncomes(current => [income, ...current])
+      } else {
+        const entry = await api.request<Entry>(view, 'POST', {
+          name: form.get('name'),
+          category: form.get('category'),
+          value: Number(form.get('value')),
+          target: Number(form.get('value')),
+          saved: Number(form.get('saved') ?? 0),
+        })
+        setData(current => ({ ...current, [view]: [entry, ...current[view]] }))
+      }
       element.reset()
     } catch (e) {
       setError((e as Error).message)
@@ -190,16 +214,20 @@ export function App() {
     }
   }
 
-  async function remove(kind: Kind, id: number) {
+  async function remove(kind: Kind | 'incomes', id: number) {
     if (!window.confirm('Excluir este registro?')) return
     setBusy(true)
     setError('')
     try {
       await api.request(`${kind}/${id}`, 'DELETE')
-      setData(current => ({
-        ...current,
-        [kind]: current[kind].filter(entry => entry.id !== id),
-      }))
+      if (kind === 'incomes') {
+        setIncomes(current => current.filter(entry => entry.id !== id))
+      } else {
+        setData(current => ({
+          ...current,
+          [kind]: current[kind].filter(entry => entry.id !== id),
+        }))
+      }
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -209,13 +237,21 @@ export function App() {
 
   const dashboard = useMemo(() => {
     const now = new Date()
-    const monthly = data.transactions.filter(entry => {
-      const date = new Date(entry.createdAt.replace(' ', 'T') + 'Z')
+    const isCurrentMonth = (raw: string) => {
+      const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z'
+      const date = new Date(normalized)
       return date.getUTCFullYear() === now.getUTCFullYear() && date.getUTCMonth() === now.getUTCMonth()
-    })
+    }
 
+    const monthly = data.transactions.filter(entry => isCurrentMonth(entry.createdAt))
     const spent = monthly.reduce((total, entry) => total + entry.value, 0)
+    const salary = incomes.filter(entry => entry.type === 'salary').reduce((total, entry) => total + entry.value, 0)
+    const monthlyExtras = incomes.filter(entry => entry.type === 'extra' && isCurrentMonth(entry.receivedAt))
+    const extras = monthlyExtras.reduce((total, entry) => total + entry.value, 0)
+    const income = salary + extras
+    const balance = income - spent
     const debt = data.debts.reduce((total, entry) => total + entry.value, 0)
+    const debtMonths = income > 0 ? debt / income : 0
     const saved = data.goals.reduce((total, entry) => total + entry.saved, 0)
     const targets = data.goals.reduce((total, entry) => total + entry.target, 0)
     const goalProgress = targets > 0 ? (saved / targets) * 100 : 0
@@ -230,8 +266,8 @@ export function App() {
       }
     }).filter(item => item.total > 0)
 
-    return { monthly, spent, debt, saved, targets, goalProgress, categoriesData }
-  }, [data])
+    return { monthly, spent, salary, monthlyExtras, extras, income, balance, debt, debtMonths, saved, targets, goalProgress, categoriesData }
+  }, [data, incomes])
 
   const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' })
     .format(new Date())
@@ -319,8 +355,9 @@ export function App() {
     )
   }
 
-  const navItems: Array<{ key: View; label: string; icon: 'overview' | 'wallet' | 'debt' | 'goal' }> = [
+  const navItems: Array<{ key: View; label: string; icon: 'overview' | 'income' | 'wallet' | 'debt' | 'goal' }> = [
     { key: 'overview', label: 'Visão geral', icon: 'overview' },
+    { key: 'incomes', label: 'Receitas', icon: 'income' },
     { key: 'transactions', label: 'Gastos', icon: 'wallet' },
     { key: 'debts', label: 'Dívidas', icon: 'debt' },
     { key: 'goals', label: 'Metas', icon: 'goal' },
@@ -355,7 +392,7 @@ export function App() {
               <span>{item.label}</span>
               {item.key !== 'overview' && (
                 <span className="nav-count">
-                  {item.key === 'transactions' ? data.transactions.length : item.key === 'debts' ? data.debts.length : data.goals.length}
+                  {item.key === 'incomes' ? incomes.length : item.key === 'transactions' ? data.transactions.length : item.key === 'debts' ? data.debts.length : data.goals.length}
                 </span>
               )}
             </button>
@@ -396,9 +433,9 @@ export function App() {
             </div>
           </div>
           {view === 'overview' && (
-            <button className="primary page-header__action" onClick={() => navigate('transactions')}>
+            <button className="primary page-header__action" onClick={() => navigate('incomes')}>
               <Icon name="plus" size={18} />
-              Novo gasto
+              Nova receita
             </button>
           )}
         </header>
@@ -409,45 +446,45 @@ export function App() {
           <div className="dashboard">
             <section className="dashboard-hero">
               <div className="dashboard-hero__main">
-                <div className="hero-icon"><Icon name="wallet" size={22} /></div>
+                <div className="hero-icon"><Icon name="income" size={22} /></div>
                 <div>
-                  <span>Gastos neste mês</span>
-                  <strong>{money(dashboard.spent)}</strong>
-                  <p>{dashboard.monthly.length ? `${dashboard.monthly.length} lançamento${dashboard.monthly.length === 1 ? '' : 's'} em ${monthLabel.toLowerCase()}` : 'Nenhum gasto registrado neste mês'}</p>
+                  <span>Receita total deste mês</span>
+                  <strong>{money(dashboard.income)}</strong>
+                  <p>{dashboard.income > 0 ? `Salário + ${dashboard.monthlyExtras.length} receita${dashboard.monthlyExtras.length === 1 ? '' : 's'} extra${dashboard.monthlyExtras.length === 1 ? '' : 's'} em ${monthLabel.toLowerCase()}` : 'Cadastre seu salário e suas receitas extras'}</p>
                 </div>
               </div>
               <div className="dashboard-hero__aside">
                 <div>
-                  <span>Maior categoria</span>
-                  <strong>{dashboard.categoriesData[0] ? [...dashboard.categoriesData].sort((a, b) => b.total - a.total)[0].category : '—'}</strong>
+                  <span>Salário mensal</span>
+                  <strong>{money(dashboard.salary)}</strong>
                 </div>
                 <div>
-                  <span>Últimos registros</span>
-                  <strong>{data.transactions.length}</strong>
+                  <span>Extras do mês</span>
+                  <strong>{money(dashboard.extras)}</strong>
                 </div>
               </div>
             </section>
 
             <section className="metrics-grid" aria-label="Resumo financeiro">
               <MetricCard
-                label="Dívidas registradas"
+                label="Saldo após gastos"
+                value={money(dashboard.balance)}
+                detail={dashboard.income > 0 ? `${percent((dashboard.spent / dashboard.income) * 100)} da renda já foi consumida por gastos` : 'Cadastre uma receita para calcular o saldo'}
+                icon="income"
+                tone={dashboard.balance >= 0 ? 'accent' : 'warning'}
+              />
+              <MetricCard
+                label="Gastos neste mês"
+                value={money(dashboard.spent)}
+                detail={dashboard.monthly.length ? `${dashboard.monthly.length} lançamento${dashboard.monthly.length === 1 ? '' : 's'} registrado${dashboard.monthly.length === 1 ? '' : 's'}` : 'Nenhum gasto no mês'}
+                icon="wallet"
+              />
+              <MetricCard
+                label="Dívida total"
                 value={money(dashboard.debt)}
-                detail={data.debts.length ? `${data.debts.length} dívida${data.debts.length === 1 ? '' : 's'} acompanhada${data.debts.length === 1 ? '' : 's'}` : 'Nenhuma dívida cadastrada'}
+                detail={dashboard.debt > 0 && dashboard.income > 0 ? `Equivale a ${dashboard.debtMonths.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mês(es) da renda atual` : data.debts.length ? `${data.debts.length} dívida${data.debts.length === 1 ? '' : 's'} cadastrada${data.debts.length === 1 ? '' : 's'}` : 'Nenhuma dívida cadastrada'}
                 icon="debt"
                 tone="warning"
-              />
-              <MetricCard
-                label="Valor reservado"
-                value={money(dashboard.saved)}
-                detail={data.goals.length ? `${percent(dashboard.goalProgress)} do valor total das metas` : 'Crie uma meta para começar'}
-                icon="goal"
-                tone="accent"
-              />
-              <MetricCard
-                label="Metas em andamento"
-                value={String(data.goals.length)}
-                detail={dashboard.targets > 0 ? `Objetivo total de ${money(dashboard.targets)}` : 'Nenhum objetivo cadastrado'}
-                icon="goal"
               />
             </section>
 
@@ -598,6 +635,64 @@ export function App() {
                 )}
               </article>
             </section>
+          </div>
+        ) : view === 'incomes' ? (
+          <div className="records-layout">
+            <section className="panel records-panel">
+              <div className="panel__header records-panel__header">
+                <div>
+                  <span className="panel__eyebrow">ENTRADAS</span>
+                  <h2>Receitas cadastradas</h2>
+                </div>
+                <span className="records-count">{incomes.length} {incomes.length === 1 ? 'item' : 'itens'}</span>
+              </div>
+
+              <div className="income-summary-strip">
+                <div><span>Salário mensal</span><strong>{money(dashboard.salary)}</strong></div>
+                <div><span>Extras deste mês</span><strong>{money(dashboard.extras)}</strong></div>
+                <div><span>Total mensal</span><strong>{money(dashboard.income)}</strong></div>
+              </div>
+
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Descrição</th><th>Tipo / referência</th><th>Valor</th><th className="table-action">Ação</th></tr></thead>
+                  <tbody>
+                    {incomes.map(entry => (
+                      <tr key={entry.id}>
+                        <td>
+                          <div className="record-name">
+                            <span className="record-icon record-icon--incomes"><Icon name="income" size={17} /></span>
+                            <div><strong>{entry.name}</strong><span>{entry.type === 'salary' ? 'Receita recorrente mensal' : 'Receita extraordinária'}</span></div>
+                          </div>
+                        </td>
+                        <td><span className={`income-type income-type--${entry.type}`}>{entry.type === 'salary' ? 'Salário' : 'Extra'}</span>{entry.type === 'extra' && <small className="income-date">{new Date(entry.receivedAt.replace(' ', 'T') + 'Z').toLocaleDateString('pt-BR')}</small>}</td>
+                        <td><strong className="table-value">{money(entry.value)}</strong></td>
+                        <td className="table-action">
+                          <button className="icon-action icon-action--danger" disabled={busy} onClick={() => remove('incomes', entry.id)} aria-label={`Excluir ${entry.name}`}><Icon name="trash" size={17} /></button>
+                        </td>
+                      </tr>
+                    ))}
+                    {!incomes.length && (
+                      <tr><td colSpan={4} className="table-empty"><div className="empty-block__icon"><Icon name="income" size={22} /></div><strong>Nenhuma receita cadastrada.</strong><span>Cadastre primeiro seu salário mensal e depois as receitas extras.</span></td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <aside className="panel record-form-panel">
+              <span className="panel__eyebrow">NOVA RECEITA</span>
+              <h2>Adicionar entrada</h2>
+              <p>Salários são considerados recorrentes todos os meses. Receitas extras entram apenas no mês da data informada.</p>
+              <form key={view} onSubmit={add}>
+                <label><span>Descrição</span><input name="name" placeholder="Ex.: Salário empresa / Freelance" required maxLength={120} /></label>
+                <label><span>Tipo de receita</span><select name="type"><option value="salary">Salário mensal</option><option value="extra">Renda extra</option></select></label>
+                <label><span>Valor</span><div className="money-input"><span>R$</span><input name="value" type="number" min="0.01" max="100000000" step="0.01" placeholder="0,00" required /></div></label>
+                <label><span>Data de referência</span><input name="receivedAt" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required /></label>
+                <button className="primary primary--full" disabled={busy}>{busy ? 'Salvando…' : 'Salvar receita'}{!busy && <Icon name="arrow" size={17} />}</button>
+              </form>
+              <div className="form-security"><Icon name="shield" size={17} /><span>O registro será salvo apenas na sua conta.</span></div>
+            </aside>
           </div>
         ) : (
           <div className="records-layout">
