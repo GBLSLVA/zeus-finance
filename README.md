@@ -163,6 +163,16 @@ Responsabilidades:
 
 Valores financeiros são armazenados em centavos inteiros.
 
+## Beta gratuito na nuvem
+
+O projeto já possui preparação para **Render Free + Supabase Free**.
+
+- Em desenvolvimento local, continua usando SQLite.
+- Em produção, quando `DATABASE_URL` estiver definida, usa PostgreSQL.
+- `npm start` escolhe automaticamente o servidor local ou de produção com base em `NODE_ENV`.
+- O arquivo `render.yaml` contém o Blueprint do Render.
+- O passo a passo está em [CLOUD_BETA.md](./CLOUD_BETA.md).
+
 ## Próximos passos planejados
 
 Prioridades seguintes:
