@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
 import { networkInterfaces } from 'node:os';
 import { FinanceApi, FinanceRepository } from './app.mjs';
-import { SqliteDatabase } from './database.mjs';
+import { openDatabase } from './database.mjs';
 
 const root = new URL('../', import.meta.url);
 const source = fileURLToPath(new URL('src/main.tsx', root));
@@ -32,7 +32,7 @@ const javascript = output.find(item=>item.type==='chunk'&&item.isEntry).code;
 const css = await readFile(new URL('src/styles.css',root),'utf8');
 const html = (await readFile(new URL('index.html',root),'utf8')).replace('/src/main.tsx','/assets/app.js').replace('</head>','<link rel="stylesheet" href="/assets/app.css"></head>');
 await mkdir(new URL('data/',root),{recursive:true});
-const database = new SqliteDatabase(fileURLToPath(new URL('data/zeus.sqlite',root)));
+const database = await openDatabase({sqlitePath:fileURLToPath(new URL('data/zeus.sqlite',root))});
 const port = Number(process.env.PREVIEW_PORT ?? 5173);
 const api = new FinanceApi(new FinanceRepository(database),process.env.APP_ORIGIN ?? 'same-origin');
 const server = createServer((req,res)=>{

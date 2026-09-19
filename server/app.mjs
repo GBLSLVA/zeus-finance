@@ -399,6 +399,14 @@ export class FinanceApi {
     this.server = createServer((req,res) => this.handle(req,res));
   }
 
+  clientAddress(req) {
+    if (process.env.TRUST_PROXY === '1') {
+      const forwarded = String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim();
+      if (forwarded) return forwarded;
+    }
+    return req.socket.remoteAddress ?? 'unknown';
+  }
+
   isOriginAllowed(req) {
     const origin = req.headers.origin;
     if (!origin) return true;
@@ -428,10 +436,17 @@ export class FinanceApi {
 
   async handle(req,res) {
     const send = (status, data, headers = {}) => {
+      const productionHeaders = process.env.NODE_ENV === 'production' ? {
+        'Strict-Transport-Security':'max-age=31536000; includeSubDomains',
+      } : {};
       res.writeHead(status, {
         'Content-Type':'application/json; charset=utf-8',
         'Cache-Control':'no-store',
         'X-Content-Type-Options':'nosniff',
+        'Referrer-Policy':'no-referrer',
+        'Permissions-Policy':'camera=(), microphone=(), geolocation=()',
+        'Content-Security-Policy':"default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+        ...productionHeaders,
         ...headers,
       });
       res.end(JSON.stringify(data));
@@ -441,13 +456,21 @@ export class FinanceApi {
       if (!this.isOriginAllowed(req)) throw new HttpError(403,'Origem não permitida.');
       const url = new URL(req.url, 'http://localhost');
       const path = url.pathname;
-      if (path === '/api/health' && req.method === 'GET') return send(200,{status:'ok'});
+      if (path === '/api/health' && req.method === 'GET') {
+        try {
+          await this.repository.db.query('SELECT 1 AS ok');
+          return send(200,{status:'ok',database:this.repository.db.kind ?? 'unknown'});
+        } catch (error) {
+          console.error('Health check database error:', error);
+          return send(503,{status:'degraded'});
+        }
+      }
 
       const token = /(?:^|;\s*)zeus_session=([a-f0-9]+)/.exec(req.headers.cookie ?? '')?.[1];
       const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
 
       if (['/api/register','/api/login'].includes(path) && req.method === 'POST') {
-        const result = await this.auth.login(await this.body(req),path === '/api/register',req.socket.remoteAddress);
+        const result = await this.auth.login(await this.body(req),path === '/api/register',this.clientAddress(req));
         return send(200,result.user,{'Set-Cookie':`zeus_session=${result.token}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=86400${secure}`});
       }
 

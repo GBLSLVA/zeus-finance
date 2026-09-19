@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import { DatabaseSync } from 'node:sqlite';
-import { SqliteDatabase } from './database.mjs';
+import { SqliteDatabase, PostgresDatabase, translatePostgresSql } from './database.mjs';
 import { FinanceApi, FinanceRepository } from './app.mjs';
 
 test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', async () => {
@@ -257,5 +257,47 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
   } finally {
     await migrated.close();
     rmSync(dir,{recursive:true,force:true});
+  }
+});
+
+
+test('PostgreSQL: traduz placeholders e funções SQLite usadas pelo repositório', () => {
+  const sql = translatePostgresSql(
+    'UPDATE entries SET updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=? RETURNING id',
+  );
+  assert.equal(
+    sql,
+    "UPDATE entries SET updated_at=to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') WHERE user_id=$1 AND id=$2 RETURNING id",
+  );
+
+  const ordered = translatePostgresSql(
+    'SELECT * FROM entries WHERE user_id=? ORDER BY COALESCE(transaction_date,substr(created_at,1,10)) DESC',
+  );
+  assert.equal(
+    ordered,
+    'SELECT * FROM entries WHERE user_id=$1 ORDER BY COALESCE(transaction_date,substring(created_at from 1 for 10)) DESC',
+  );
+});
+
+test('PostgreSQL: aplica migrations e executa query parametrizada', {skip: !process.env.TEST_DATABASE_URL}, async () => {
+  const db = new PostgresDatabase(process.env.TEST_DATABASE_URL);
+  await db.init();
+  try {
+    const versions = (await db.query('SELECT version FROM schema_migrations ORDER BY version')).recordset.map(row => row.version);
+    assert.deepEqual(versions,[1,2,3,4,5]);
+
+    const email = `postgres-test-${Date.now()}@example.com`;
+    const inserted = await db.query(
+      'INSERT INTO users(email,password) VALUES(?,?) RETURNING id',
+      [email,'test-hash'],
+    );
+    assert.ok(inserted.recordset[0].id);
+
+    const found = await db.query('SELECT email FROM users WHERE id=?',[inserted.recordset[0].id]);
+    assert.equal(found.recordset[0].email,email);
+
+    await db.query('DELETE FROM users WHERE id=?',[inserted.recordset[0].id]);
+  } finally {
+    await db.close();
   }
 });
