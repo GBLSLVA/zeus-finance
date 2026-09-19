@@ -1,0 +1,103 @@
+name: Security Audit
+
+on:
+  push:
+    branches:
+      - audit/security-2026-09-18
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  application-security:
+    name: Application security probes
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Production dependency audit
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Full dependency audit
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+      - name: Security unit probes
+        run: node --test --test-isolation=none server/security.test.mjs
+
+      - name: Build
+        run: npm run build
+
+      - name: Production malformed-path and traversal probes
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -u
+          NODE_ENV=production PORT=4190 npm start >/tmp/zeus-security-server.log 2>&1 &
+          PID=$!
+          cleanup() {
+            kill "$PID" 2>/dev/null || true
+            cat /tmp/zeus-security-server.log
+          }
+          trap cleanup EXIT
+
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:4190/api/health >/dev/null; then break; fi
+            sleep 1
+          done
+
+          echo "== traversal probe =="
+          curl --path-as-is -sS 'http://127.0.0.1:4190/%2e%2e/%2e%2e/package.json' -o /tmp/traversal-response || true
+          if grep -q '"scripts"' /tmp/traversal-response; then
+            echo "VULNERABLE: package.json foi exposto por path traversal"
+            exit 1
+          fi
+          echo "PASS: nenhum package.json exposto"
+
+          echo "== malformed URI probe =="
+          curl --path-as-is -sS 'http://127.0.0.1:4190/%E0%A4%A' -o /tmp/malformed-response || true
+          sleep 1
+          if ! kill -0 "$PID" 2>/dev/null; then
+            echo "VULNERABLE: URL percent-encoded malformada derrubou o processo Node"
+            exit 2
+          fi
+          curl -fsS http://127.0.0.1:4190/api/health >/dev/null
+          echo "PASS: processo continuou saudável"
+
+  postgres-security:
+    name: PostgreSQL concurrency security probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: zeus_security
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d zeus_security"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Concurrent payment integrity test
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/zeus_security
+        run: node --test --test-isolation=none --test-name-pattern="Segurança PostgreSQL" server/security.test.mjs
