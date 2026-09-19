@@ -382,11 +382,18 @@ export class PostgresDatabase {
   }
 }
 
-export async function openDatabase({ sqlitePath } = {}) {
+export async function openDatabase({ sqlitePath, allowSqliteProduction = false } = {}) {
   if (process.env.DATABASE_URL) {
     const database = new PostgresDatabase(process.env.DATABASE_URL);
     await database.init();
     return database;
+  }
+
+  const sqliteAllowedInProduction = allowSqliteProduction || process.env.ALLOW_SQLITE_PRODUCTION === '1';
+  if (process.env.NODE_ENV === 'production' && !sqliteAllowedInProduction) {
+    throw new Error(
+      'DATABASE_URL é obrigatório em produção. O ZEUS não inicia com SQLite efêmero para evitar perda de usuários e dados após reinícios.',
+    );
   }
 
   const path = process.env.DATABASE_PATH ?? sqlitePath;

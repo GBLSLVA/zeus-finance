@@ -44,7 +44,7 @@ jobs:
       - name: Smoke test production server
         shell: bash
         run: |
-          NODE_ENV=production PORT=4173 npm start > /tmp/zeus-production.log 2>&1 &
+          NODE_ENV=production ALLOW_SQLITE_PRODUCTION=1 PORT=4173 npm start > /tmp/zeus-production.log 2>&1 &
           ZEUS_PID=$!
           cleanup() {
             kill "$ZEUS_PID" 2>/dev/null || true
