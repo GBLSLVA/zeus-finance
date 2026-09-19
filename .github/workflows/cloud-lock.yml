@@ -1,0 +1,36 @@
+name: Update cloud lockfile
+
+on:
+  push:
+    branches:
+      - feat/cloud-beta-render-supabase
+    paths:
+      - package.json
+      - .github/workflows/cloud-lock.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/cloud-beta-render-supabase
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --package-lock-only
+      - name: Commit lockfile
+        run: |
+          if git diff --quiet package-lock.json; then
+            echo "package-lock.json já está atualizado."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore: update lockfile for PostgreSQL"
+          git push
