@@ -136,14 +136,32 @@ test('Segurança: rate limit de autenticação bloqueia a 21ª tentativa por end
 });
 
 test('Segurança PostgreSQL: pagamentos concorrentes não podem ultrapassar o saldo', {skip: !process.env.TEST_DATABASE_URL}, async () => {
-  const db = new PostgresDatabase(process.env.TEST_DATABASE_URL);
-  await db.init();
+  const inner = new PostgresDatabase(process.env.TEST_DATABASE_URL);
+  await inner.init();
+
+  let debtReads = 0;
+  let releaseReads;
+  const bothRead = new Promise(resolve => { releaseReads = resolve; });
+
+  const db = {
+    kind: 'postgres',
+    async query(statement, values = []) {
+      const result = await inner.query(statement, values);
+      if (statement === 'SELECT * FROM debts WHERE user_id=? AND id=?' && debtReads < 2) {
+        debtReads += 1;
+        if (debtReads === 2) releaseReads();
+        await bothRead;
+      }
+      return result;
+    },
+  };
+
   const repository = new FinanceRepository(db);
   const email = `race-${Date.now()}@example.com`;
   let user;
   let debt;
   try {
-    user = (await db.query(
+    user = (await inner.query(
       'INSERT INTO users(email,password) VALUES(?,?) RETURNING id',
       [email,'not-used'],
     )).recordset[0].id;
@@ -171,13 +189,13 @@ test('Segurança PostgreSQL: pagamentos concorrentes não podem ultrapassar o sa
     assert.ok(totalPaid <= 100,'O total pago nunca pode ultrapassar o valor original.');
   } finally {
     if (user) {
-      await db.query('DELETE FROM debts WHERE user_id=?',[user]);
-      await db.query('DELETE FROM sessions WHERE user_id=?',[user]);
-      await db.query('DELETE FROM entries WHERE user_id=?',[user]);
-      await db.query('DELETE FROM incomes WHERE user_id=?',[user]);
-      await db.query('DELETE FROM budgets WHERE user_id=?',[user]);
-      await db.query('DELETE FROM users WHERE id=?',[user]);
+      await inner.query('DELETE FROM debts WHERE user_id=?',[user]);
+      await inner.query('DELETE FROM sessions WHERE user_id=?',[user]);
+      await inner.query('DELETE FROM entries WHERE user_id=?',[user]);
+      await inner.query('DELETE FROM incomes WHERE user_id=?',[user]);
+      await inner.query('DELETE FROM budgets WHERE user_id=?',[user]);
+      await inner.query('DELETE FROM users WHERE id=?',[user]);
     }
-    await db.close();
+    await inner.close();
   }
 });
