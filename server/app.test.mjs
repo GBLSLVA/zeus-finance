@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import { DatabaseSync } from 'node:sqlite';
-import { SqliteDatabase, PostgresDatabase, translatePostgresSql } from './database.mjs';
-import { FinanceApi, FinanceRepository } from './app.mjs';
+import { SqliteDatabase, PostgresDatabase, openDatabase, translatePostgresSql } from './database.mjs';
+import { AuthService, FinanceApi, FinanceRepository } from './app.mjs';
 
 test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', async () => {
   const dir = mkdtempSync(join(tmpdir(),'zeus-test-'));
@@ -261,6 +261,27 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
 });
 
 
+
+test('Produção: recusa SQLite sem DATABASE_URL para proteger persistência', async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  const previousAllowSqlite = process.env.ALLOW_SQLITE_PRODUCTION;
+  process.env.NODE_ENV = 'production';
+  delete process.env.DATABASE_URL;
+  delete process.env.ALLOW_SQLITE_PRODUCTION;
+
+  try {
+    await assert.rejects(
+      () => openDatabase({sqlitePath:':memory:'}),
+      /DATABASE_URL é obrigatório em produção/,
+    );
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previousNodeEnv;
+    if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = previousDatabaseUrl;
+    if (previousAllowSqlite === undefined) delete process.env.ALLOW_SQLITE_PRODUCTION; else process.env.ALLOW_SQLITE_PRODUCTION = previousAllowSqlite;
+  }
+});
+
 test('PostgreSQL: traduz placeholders e funções SQLite usadas pelo repositório', () => {
   const sql = translatePostgresSql(
     'UPDATE entries SET updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=? RETURNING id',
@@ -279,25 +300,41 @@ test('PostgreSQL: traduz placeholders e funções SQLite usadas pelo repositóri
   );
 });
 
-test('PostgreSQL: aplica migrations e executa query parametrizada', {skip: !process.env.TEST_DATABASE_URL}, async () => {
-  const db = new PostgresDatabase(process.env.TEST_DATABASE_URL);
-  await db.init();
+test('PostgreSQL: persiste cadastro e permite login após reconectar', {skip: !process.env.TEST_DATABASE_URL}, async () => {
+  const email = `postgres-login-${Date.now()}@example.com`;
+  const password = 'secure-postgres-password-123';
+  let userId;
+
+  const firstConnection = new PostgresDatabase(process.env.TEST_DATABASE_URL);
+  await firstConnection.init();
   try {
-    const versions = (await db.query('SELECT version FROM schema_migrations ORDER BY version')).recordset.map(row => row.version);
+    const versions = (await firstConnection.query('SELECT version FROM schema_migrations ORDER BY version')).recordset.map(row => row.version);
     assert.deepEqual(versions,[1,2,3,4,5]);
 
-    const email = `postgres-test-${Date.now()}@example.com`;
-    const inserted = await db.query(
-      'INSERT INTO users(email,password) VALUES(?,?) RETURNING id',
-      [email,'test-hash'],
-    );
-    assert.ok(inserted.recordset[0].id);
+    const auth = new AuthService(new FinanceRepository(firstConnection));
+    const registered = await auth.login({email,password},true,'postgres-register');
+    userId = registered.user.id;
+    assert.equal(registered.user.email,email);
 
-    const found = await db.query('SELECT email FROM users WHERE id=?',[inserted.recordset[0].id]);
-    assert.equal(found.recordset[0].email,email);
-
-    await db.query('DELETE FROM users WHERE id=?',[inserted.recordset[0].id]);
+    const stored = (await firstConnection.query('SELECT email,password FROM users WHERE id=?',[userId])).recordset[0];
+    assert.equal(stored.email,email);
+    assert.notEqual(stored.password,password);
+    assert.match(stored.password,/^[a-f0-9]{32}:[a-f0-9]{128}$/);
   } finally {
-    await db.close();
+    await firstConnection.close();
+  }
+
+  const secondConnection = new PostgresDatabase(process.env.TEST_DATABASE_URL);
+  await secondConnection.init();
+  try {
+    const auth = new AuthService(new FinanceRepository(secondConnection));
+    const loggedIn = await auth.login({email,password},false,'postgres-login');
+    assert.equal(loggedIn.user.id,userId);
+    assert.equal(loggedIn.user.email,email);
+
+    await secondConnection.query('DELETE FROM sessions WHERE user_id=?',[userId]);
+    await secondConnection.query('DELETE FROM users WHERE id=?',[userId]);
+  } finally {
+    await secondConnection.close();
   }
 });
