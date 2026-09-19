@@ -36,6 +36,8 @@ O arquivo `render.yaml` já define:
 
 No campo secreto `DATABASE_URL`, cole a connection string do Session Pooler do Supabase.
 
+> **Importante:** em produção o ZEUS agora se recusa a iniciar sem `DATABASE_URL`. Isso evita que contas e registros sejam gravados no disco temporário do Render e desapareçam após reinício ou novo deploy.
+
 ## 3. Primeiro deploy
 
 No primeiro start:
@@ -80,6 +82,18 @@ Resposta esperada:
 ```
 
 Depois abra a raiz do domínio, crie uma conta de teste e registre uma receita/gasto.
+
+### Onde os usuários aparecem no Supabase
+
+O ZEUS usa o **PostgreSQL do Supabase**, mas ainda mantém autenticação própria. Portanto, as contas **não aparecem em `Authentication > Users`** do Supabase.
+
+Os usuários ficam em:
+
+```text
+Table Editor -> public -> users
+```
+
+A coluna `password` guarda somente `salt:hash` gerado com `scrypt`; a senha original não é salva em texto puro.
 
 ## 6. Limitações do beta gratuito
 
