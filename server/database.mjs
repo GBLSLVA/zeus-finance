@@ -323,6 +323,7 @@ export class SqliteDatabase {
 export const translatePostgresSql = statement => {
   let parameter = 0;
   return statement
+    .replaceAll('CURRENT_TIMESTAMP', "to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS')")
     .replaceAll('substr(created_at,1,10)', 'substring(created_at from 1 for 10)')
     .replaceAll('substr(received_at,1,10)', 'substring(received_at from 1 for 10)')
     .replace(/\?/g, () => `$${++parameter}`);
