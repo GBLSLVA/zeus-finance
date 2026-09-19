@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   test-and-build:
-    name: Test and build
+    name: Test, build and production smoke
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -41,6 +41,27 @@ jobs:
       - name: Build application
         run: npm run build
 
+      - name: Smoke test production server
+        shell: bash
+        run: |
+          NODE_ENV=production PORT=4173 npm start > /tmp/zeus-production.log 2>&1 &
+          ZEUS_PID=$!
+          cleanup() {
+            kill "$ZEUS_PID" 2>/dev/null || true
+            cat /tmp/zeus-production.log
+          }
+          trap cleanup EXIT
+
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/api/health | grep -q '"status":"ok"'; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "Servidor de produção não ficou saudável."
+          exit 1
+
       - name: Upload production build
         if: success()
         uses: actions/upload-artifact@v4
@@ -49,3 +70,41 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 7
+
+  postgres-smoke:
+    name: PostgreSQL migrations and adapter
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: zeus_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d zeus_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run PostgreSQL adapter tests
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/zeus_test
+        run: node --test --test-isolation=none --test-name-pattern="PostgreSQL" server/app.test.mjs
