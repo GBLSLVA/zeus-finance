@@ -25,7 +25,12 @@ const dateOnly = (value, {optional = false} = {}) => {
 };
 
 const digest = value => createHash('sha256').update(value).digest('hex');
-const today = () => new Date().toISOString().slice(0, 10);
+const appTimeZone = process.env.APP_TIMEZONE ?? 'America/Sao_Paulo';
+const today = () => {
+  const parts = new Intl.DateTimeFormat('en-US', {timeZone: appTimeZone, year: 'numeric', month: '2-digit', day: '2-digit'}).formatToParts(new Date());
+  const values = Object.fromEntries(parts.filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+};
 const categories = ['Casa','Comida','Transporte','Lazer','Outros'];
 
 const monthOnly = value => {
@@ -119,6 +124,7 @@ export class FinanceRepository {
     const category = kind === 'transactions' ? text(data.category) : null;
     if (category && !categories.includes(category)) throw new HttpError(400, 'Categoria inválida.');
     const saved = kind === 'goals' ? cents(data.saved ?? 0, true) : 0;
+    if (kind === 'goals' && saved > amount) throw new HttpError(400, 'O valor reservado não pode superar o valor alvo.');
     const transactionDate = kind === 'transactions' ? dateOnly(data.transactionDate ?? today()) : null;
     const result = await this.db.query(
       'INSERT INTO entries(user_id,kind,name,category,amount,saved,transaction_date,updated_at) VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP) RETURNING id',
@@ -134,6 +140,7 @@ export class FinanceRepository {
     const category = kind === 'transactions' ? text(data.category) : null;
     if (category && !categories.includes(category)) throw new HttpError(400, 'Categoria inválida.');
     const saved = kind === 'goals' ? cents(data.saved ?? 0, true) : 0;
+    if (kind === 'goals' && saved > amount) throw new HttpError(400, 'O valor reservado não pode superar o valor alvo.');
     const transactionDate = kind === 'transactions' ? dateOnly(data.transactionDate ?? today()) : null;
     const result = await this.db.query(
       'UPDATE entries SET name=?,category=?,amount=?,saved=?,transaction_date=COALESCE(?,transaction_date),updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND kind=? AND id=?',
@@ -443,6 +450,7 @@ export class FinanceApi {
         'Content-Type':'application/json; charset=utf-8',
         'Cache-Control':'no-store',
         'X-Content-Type-Options':'nosniff',
+        'X-Frame-Options':'DENY',
         'Referrer-Policy':'no-referrer',
         'Permissions-Policy':'camera=(), microphone=(), geolocation=()',
         'Content-Security-Policy':"default-src 'none'; frame-ancestors 'none'; base-uri 'none'",

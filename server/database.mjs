@@ -148,6 +148,22 @@ const sqliteMigrations = [
       `);
     },
   },
+  {
+    version: 6,
+    name: 'goal_saved_limit',
+    up(db) {
+      db.exec(`
+        CREATE TRIGGER IF NOT EXISTS entries_goal_saved_limit_insert
+        BEFORE INSERT ON entries
+        WHEN NEW.kind='goals' AND NEW.saved > NEW.amount
+        BEGIN SELECT RAISE(ABORT, 'goal_saved_exceeds_target'); END;
+        CREATE TRIGGER IF NOT EXISTS entries_goal_saved_limit_update
+        BEFORE UPDATE OF amount,saved,kind ON entries
+        WHEN NEW.kind='goals' AND NEW.saved > NEW.amount
+        BEGIN SELECT RAISE(ABORT, 'goal_saved_exceeds_target'); END;
+      `);
+    },
+  },
 ];
 
 const postgresMigrations = [
@@ -269,6 +285,24 @@ const postgresMigrations = [
         UNIQUE(user_id,month,category)
       );
       CREATE INDEX IF NOT EXISTS budgets_owner_month ON budgets(user_id,month);
+    `,
+  },
+  {
+    version: 6,
+    name: 'goal_saved_limit',
+    sql: `
+      CREATE OR REPLACE FUNCTION enforce_goal_saved_limit() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.kind='goals' AND NEW.saved > NEW.amount THEN
+          RAISE EXCEPTION 'goal_saved_exceeds_target';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+      DROP TRIGGER IF EXISTS entries_goal_saved_limit ON entries;
+      CREATE TRIGGER entries_goal_saved_limit
+      BEFORE INSERT OR UPDATE OF amount,saved,kind ON entries
+      FOR EACH ROW EXECUTE FUNCTION enforce_goal_saved_limit();
     `,
   },
 ];

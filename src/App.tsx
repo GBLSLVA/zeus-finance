@@ -97,6 +97,11 @@ const currentMonthKey = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
+const currentDateKey = () => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+
 const shiftMonthKey = (monthKey: string, offset: number) => {
   const [year, month] = monthKey.split('-').map(Number)
   const date = new Date(year, month - 1 + offset, 1)
@@ -209,7 +214,7 @@ export function App() {
         setUser(currentUser)
       })
       .catch(e => {
-        if (e.message !== 'Entre na sua conta.' && e.message !== 'Sessão expirada.') {
+        if ((e as { status?: number }).status !== 401) {
           setError('Inicie o backend para acessar sua conta.')
         }
       })
@@ -850,6 +855,7 @@ export function App() {
                   <div className="spending-layout">
                     <div
                       className="donut"
+                      role="img"
                       style={{
                         background: `conic-gradient(${dashboard.categoriesData.map((item, index, items) => {
                           const start = items.slice(0, index).reduce((sum, current) => sum + current.share, 0)
@@ -1252,7 +1258,7 @@ export function App() {
                   <div className="payments-layout">
                     <form className="payment-form" onSubmit={addDebtPayment}>
                       <label><span>Valor pago</span><div className="money-input"><span>R$</span><input name="amount" type="number" min="0.01" max={debt.currentBalance} step="0.01" placeholder="0,00" required /></div></label>
-                      <label><span>Data do pagamento</span><input name="paymentDate" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required /></label>
+                      <label><span>Data do pagamento</span><input name="paymentDate" type="date" defaultValue={currentDateKey()} required /></label>
                       <label><span>Observação</span><input name="note" placeholder="Ex.: Parcela de setembro" maxLength={240} /></label>
                       <label className="check-field"><input name="countsAsInstallment" type="checkbox" defaultChecked /><span>Contar como parcela paga</span></label>
                       <button className="primary primary--full" disabled={busy || debt.currentBalance <= 0}>{debt.currentBalance <= 0 ? 'Dívida quitada' : busy ? 'Salvando…' : 'Registrar pagamento'}</button>
@@ -1337,7 +1343,7 @@ export function App() {
                 <label><span>Descrição</span><input name="name" defaultValue={editing?.kind === 'incomes' ? editing.entry.name : ''} placeholder="Ex.: Salário empresa / Freelance" required maxLength={120} /></label>
                 <label><span>Tipo de receita</span><select name="type" defaultValue={editing?.kind === 'incomes' ? editing.entry.type : 'salary'}><option value="salary">Salário mensal</option><option value="extra">Renda extra</option></select></label>
                 <label><span>Valor</span><div className="money-input"><span>R$</span><input name="value" type="number" min="0.01" max="100000000" step="0.01" defaultValue={editing?.kind === 'incomes' ? editing.entry.value : undefined} placeholder="0,00" required /></div></label>
-                <label><span>Data de referência / início</span><input name="date" type="date" defaultValue={editing?.kind === 'incomes' ? (editing.entry.type === 'salary' ? editing.entry.activeFrom : editing.entry.receivedAt.slice(0, 10)) : new Date().toISOString().slice(0, 10)} required /></label>
+                <label><span>Data de referência / início</span><input name="date" type="date" defaultValue={editing?.kind === 'incomes' ? (editing.entry.type === 'salary' ? editing.entry.activeFrom : editing.entry.receivedAt.slice(0, 10)) : currentDateKey()} required /></label>
                 <label><span>Vigente até (opcional para salário)</span><input name="activeUntil" type="date" defaultValue={editing?.kind === 'incomes' ? editing.entry.activeUntil ?? '' : ''} /></label>
                 <label className="check-field"><input name="active" type="checkbox" defaultChecked={editing?.kind === 'incomes' ? editing.entry.active : true} /><span>Receita ativa</span></label>
                 <div className="form-actions">
@@ -1465,7 +1471,7 @@ export function App() {
                 {view === 'transactions' && (
                   <label>
                     <span>Data do gasto</span>
-                    <input name="transactionDate" type="date" defaultValue={editing?.kind === 'transactions' ? editing.entry.transactionDate : new Date().toISOString().slice(0, 10)} required />
+                    <input name="transactionDate" type="date" defaultValue={editing?.kind === 'transactions' ? editing.entry.transactionDate : currentDateKey()} required />
                   </label>
                 )}
 

@@ -35,12 +35,13 @@ await mkdir(new URL('data/',root),{recursive:true});
 const database = await openDatabase({sqlitePath:fileURLToPath(new URL('data/zeus.sqlite',root))});
 const port = Number(process.env.PREVIEW_PORT ?? 5173);
 const api = new FinanceApi(new FinanceRepository(database),process.env.APP_ORIGIN ?? 'same-origin');
+const securityHeaders = {'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Permissions-Policy':'camera=(), microphone=(), geolocation=()','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"};
 const server = createServer((req,res)=>{
   const path=new URL(req.url,'http://localhost').pathname;
   if(path.startsWith('/api/')) { void api.handle(req,res); return; }
   const asset=path==='/'?[html,'text/html']:path==='/assets/app.js'?[javascript,'text/javascript']:path==='/assets/app.css'?[css,'text/css']:null;
   if(!asset){res.writeHead(404);res.end('Não encontrado');return;}
-  res.writeHead(200,{'Content-Type':`${asset[1]}; charset=utf-8`,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(asset[0]);
+  res.writeHead(200,{...securityHeaders,'Content-Type':`${asset[1]}; charset=utf-8`,'Cache-Control':'no-store'});res.end(asset[0]);
 });
 server.on('error',async error=>{console.error(error.message);await database.close();process.exitCode=1;});
 const host = process.env.PREVIEW_HOST ?? '0.0.0.0';

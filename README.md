@@ -162,6 +162,7 @@ Responsabilidades:
 - **SqliteDatabase:** conexão SQLite, queries e migrations.
 
 Valores financeiros são armazenados em centavos inteiros.
+O fuso das datas financeiras usa `APP_TIMEZONE`, com `America/Sao_Paulo` como padrão.
 
 ## Beta gratuito na nuvem
 

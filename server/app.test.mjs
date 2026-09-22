@@ -60,6 +60,7 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
 
     assert.equal((await call('transactions','POST',{name:'Inválido',category:'Comida',value:-1,transactionDate:'2026-09-01'},first.cookie)).status,400);
     assert.equal((await call('transactions','POST',{name:'Data ruim',category:'Comida',value:10,transactionDate:'2026-02-31'},first.cookie)).status,400);
+    assert.equal((await call('goals','POST',{name:'Meta inválida',target:100,saved:101},first.cookie)).status,400);
 
     assert.equal((await call('goals','POST',{name:'Reserva',target:1000,saved:100},first.cookie)).status,201);
 
@@ -224,7 +225,7 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
   const migrated = new SqliteDatabase(path);
   try {
     const versions = migrated.db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(row => row.version);
-    assert.deepEqual(versions,[1,2,3,4,5]);
+    assert.deepEqual(versions,[1,2,3,4,5,6]);
 
     const entryColumns = migrated.db.prepare('PRAGMA table_info(entries)').all().map(row => row.name);
     assert.ok(entryColumns.includes('transaction_date'));
