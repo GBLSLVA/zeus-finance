@@ -76,6 +76,9 @@ const monthBounds = monthKey => {
 const effectiveIncomeEnd = entry =>
   entry.activeUntil ?? (!entry.active ? entry.updatedAt?.slice(0,10) || entry.activeFrom : null);
 
+const effectiveRecurringEnd = entry =>
+  entry.activeUntil ?? (!entry.active ? entry.updatedAt?.slice(0,10) || entry.activeFrom : null);
+
 const moneyText = value =>
   Number(value).toLocaleString('pt-BR', {style:'currency',currency:'BRL'});
 
@@ -162,17 +165,31 @@ const normalizeBudget = row => ({
   updatedAt: row.updated_at,
 });
 
+const normalizeRecurringExpense = row => ({
+  id: row.id,
+  name: row.name,
+  category: row.category,
+  value: row.amount / 100,
+  dueDay: row.due_day,
+  activeFrom: row.active_from,
+  activeUntil: row.active_until ?? null,
+  active: Boolean(row.active ?? 1),
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
 export class FinanceRepository {
   constructor(database) { this.db = database; }
 
   async dashboard(user, month) {
     const monthKey = monthOnly(month);
-    const [transactions, debts, goals, incomes, budgets] = await Promise.all([
+    const [transactions, debts, goals, incomes, budgets, recurringExpenses] = await Promise.all([
       this.list(user, 'transactions'),
       this.listDebts(user),
       this.list(user, 'goals'),
       this.listIncomes(user),
       this.listBudgets(user, monthKey),
+      this.listRecurringExpenses(user),
     ]);
 
     const calculateMonth = key => {
@@ -189,6 +206,22 @@ export class FinanceRepository {
       const salary = activeSalaries.reduce((total, entry) => total + entry.value, 0);
       const monthlyExtras = incomes.filter(entry => entry.type === 'extra' && belongsToMonth(entry.receivedAt));
       const extras = monthlyExtras.reduce((total, entry) => total + entry.value, 0);
+      const monthRecurring = recurringExpenses
+        .filter(entry => {
+          const activeUntil = effectiveRecurringEnd(entry);
+          return entry.activeFrom <= monthEnd
+            && (!activeUntil || activeUntil >= monthStart);
+        })
+        .map(entry => {
+          const lastDay = Number(monthEnd.slice(8,10));
+          const day = Math.min(entry.dueDay,lastDay);
+          return {
+            ...entry,
+            scheduledDate:`${key}-${String(day).padStart(2,'0')}`,
+          };
+        });
+      const recurringTotal = monthRecurring.reduce((total, entry) => total + entry.value, 0);
+      const income = salary + extras;
       return {
         monthly,
         spent,
@@ -196,7 +229,11 @@ export class FinanceRepository {
         salary,
         monthlyExtras,
         extras,
-        income:salary + extras,
+        income,
+        recurringExpenses:monthRecurring,
+        recurringTotal,
+        projectedSpent:spent + recurringTotal,
+        projectedBalance:income - spent - recurringTotal,
       };
     };
 
@@ -972,6 +1009,56 @@ export class FinanceRepository {
     if (!result.rowsAffected[0]) throw new HttpError(404, 'Orçamento não encontrado.');
   }
 
+  async listRecurringExpenses(user) {
+    const result = await this.db.query(
+      'SELECT * FROM recurring_expenses WHERE user_id=? ORDER BY CASE active WHEN 1 THEN 0 ELSE 1 END,due_day,id DESC',
+      [user],
+    );
+    return result.recordset.map(normalizeRecurringExpense);
+  }
+
+  recurringExpenseFields(data) {
+    const name = text(data.name);
+    const category = text(data.category);
+    if (!categories.includes(category)) throw new HttpError(400, 'Categoria inválida.');
+    const amount = cents(data.value);
+    const dueDay = Number(data.dueDay);
+    if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) throw new HttpError(400, 'Dia de vencimento inválido.');
+    const activeFrom = dateOnly(data.activeFrom ?? today());
+    const active = data.active === false ? 0 : 1;
+    const requestedActiveUntil = dateOnly(data.activeUntil, {optional:true});
+    const deactivationDate = today();
+    const activeUntil = !active && !requestedActiveUntil
+      ? (deactivationDate < activeFrom ? activeFrom : deactivationDate)
+      : requestedActiveUntil;
+    if (activeUntil && activeUntil < activeFrom) throw new HttpError(400, 'A data final não pode ser anterior à data inicial.');
+    return {name,category,amount,dueDay,activeFrom,activeUntil,active};
+  }
+
+  async addRecurringExpense(user, data) {
+    const fields = this.recurringExpenseFields(data);
+    const result = await this.db.query(
+      'INSERT INTO recurring_expenses(user_id,name,category,amount,due_day,active_from,active_until,active,updated_at) VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) RETURNING id',
+      [user,fields.name,fields.category,fields.amount,fields.dueDay,fields.activeFrom,fields.activeUntil,fields.active],
+    );
+    return (await this.listRecurringExpenses(user)).find(row => row.id === result.recordset[0].id);
+  }
+
+  async updateRecurringExpense(user, id, data) {
+    const fields = this.recurringExpenseFields(data);
+    const result = await this.db.query(
+      'UPDATE recurring_expenses SET name=?,category=?,amount=?,due_day=?,active_from=?,active_until=?,active=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=?',
+      [fields.name,fields.category,fields.amount,fields.dueDay,fields.activeFrom,fields.activeUntil,fields.active,user,id],
+    );
+    if (!result.rowsAffected[0]) throw new HttpError(404, 'Gasto recorrente não encontrado.');
+    return (await this.listRecurringExpenses(user)).find(row => row.id === id);
+  }
+
+  async removeRecurringExpense(user, id) {
+    const result = await this.db.query('DELETE FROM recurring_expenses WHERE user_id=? AND id=?', [user,id]);
+    if (!result.rowsAffected[0]) throw new HttpError(404, 'Gasto recorrente não encontrado.');
+  }
+
   async exportUserData(user) {
     const account = (await this.db.query('SELECT id,email FROM users WHERE id=?', [user])).recordset[0];
     if (!account) throw new HttpError(404, 'Conta não encontrada.');
@@ -996,6 +1083,10 @@ export class FinanceRepository {
       'SELECT * FROM budgets WHERE user_id=? ORDER BY month,category,id',
       [user],
     )).recordset;
+    const recurringExpenses = (await this.db.query(
+      'SELECT * FROM recurring_expenses WHERE user_id=? ORDER BY due_day,id',
+      [user],
+    )).recordset;
 
     return {
       format: 'zeus-finance-backup',
@@ -1008,6 +1099,7 @@ export class FinanceRepository {
       debts: debts.map(normalizeDebt),
       debtPayments: debtPayments.map(normalizeDebtPayment),
       budgets: budgets.map(normalizeBudget),
+      recurringExpenses: recurringExpenses.map(normalizeRecurringExpense),
     };
   }
 
@@ -1196,6 +1288,7 @@ export class AuthService {
       await database.query('DELETE FROM debt_payments WHERE user_id=?', [userId]);
       await database.query('DELETE FROM debts WHERE user_id=?', [userId]);
       await database.query('DELETE FROM budgets WHERE user_id=?', [userId]);
+      await database.query('DELETE FROM recurring_expenses WHERE user_id=?', [userId]);
       await database.query('DELETE FROM entries WHERE user_id=?', [userId]);
       await database.query('DELETE FROM incomes WHERE user_id=?', [userId]);
       await database.query('DELETE FROM sessions WHERE user_id=?', [userId]);
@@ -1318,6 +1411,16 @@ export class FinanceApi {
       if (path === '/api/budgets') {
         if (req.method === 'GET') return send(200,await this.repository.listBudgets(user,url.searchParams.get('month')));
         if (req.method === 'POST') return send(200,await this.repository.upsertBudget(user,await this.body(req)));
+        throw new HttpError(405,'Método não permitido.');
+      }
+
+      const recurringExpenseRoute = /^\/api\/recurring-expenses(?:\/(\d+))?$/.exec(path);
+      if (recurringExpenseRoute) {
+        const id = recurringExpenseRoute[1] ? Number(recurringExpenseRoute[1]) : null;
+        if (req.method === 'GET' && !id) return send(200,await this.repository.listRecurringExpenses(user));
+        if (req.method === 'POST' && !id) return send(201,await this.repository.addRecurringExpense(user,await this.body(req)));
+        if (req.method === 'PUT' && id) return send(200,await this.repository.updateRecurringExpense(user,id,await this.body(req)));
+        if (req.method === 'DELETE' && id) { await this.repository.removeRecurringExpense(user,id); return send(200,{}); }
         throw new HttpError(405,'Método não permitido.');
       }
 
