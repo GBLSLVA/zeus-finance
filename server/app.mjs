@@ -339,7 +339,10 @@ export class FinanceRepository {
       const activeFrom = dateOnly(data.activeFrom ?? data.receivedAt ?? today());
       const active = data.active === false ? 0 : 1;
       const requestedActiveUntil = dateOnly(data.activeUntil, {optional:true});
-      const activeUntil = !active && !requestedActiveUntil ? today() : requestedActiveUntil;
+      const deactivationDate = today();
+      const activeUntil = !active && !requestedActiveUntil
+        ? (deactivationDate < activeFrom ? activeFrom : deactivationDate)
+        : requestedActiveUntil;
       if (activeUntil && activeUntil < activeFrom) throw new HttpError(400, 'A data final não pode ser anterior à data inicial.');
       return {
         name,
