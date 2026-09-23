@@ -185,6 +185,7 @@ export function App() {
   const [register, setRegister] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [view, setView] = useState<View>('overview')
   const [menu, setMenu] = useState(false)
   const [data, setData] = useState<Record<Kind, Entry[]>>({
@@ -202,6 +203,9 @@ export function App() {
   const [passwordBusy, setPasswordBusy] = useState(false)
   const [passwordError, setPasswordError] = useState('')
   const [passwordChanged, setPasswordChanged] = useState(false)
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false)
+  const [deleteAccountBusy, setDeleteAccountBusy] = useState(false)
+  const [deleteAccountError, setDeleteAccountError] = useState('')
 
   const load = async () => {
     const [transactions, debts, goals, incomeEntries] = await Promise.all([
@@ -256,6 +260,9 @@ export function App() {
       setPasswordOpen(false)
       setPasswordError('')
       setPasswordChanged(false)
+      setDeleteAccountOpen(false)
+      setDeleteAccountError('')
+      setNotice('')
       setError('Sua sessão expirou. Entre novamente.')
     }
 
@@ -267,6 +274,7 @@ export function App() {
     event.preventDefault()
     setBusy(true)
     setError('')
+    setNotice('')
     const form = new FormData(event.currentTarget)
     try {
       const currentUser = await api.request<User>(register ? 'register' : 'login', 'POST', {
@@ -303,6 +311,9 @@ export function App() {
       setPasswordOpen(false)
       setPasswordError('')
       setPasswordChanged(false)
+      setDeleteAccountOpen(false)
+      setDeleteAccountError('')
+      setNotice('')
     } catch (e) {
       setError((e as Error).message)
     }
@@ -348,6 +359,59 @@ export function App() {
     setPasswordOpen(false)
     setPasswordError('')
     setPasswordChanged(false)
+  }
+
+  function openDeleteAccountDialog() {
+    setDeleteAccountError('')
+    setDeleteAccountOpen(true)
+    setMenu(false)
+  }
+
+  function closeDeleteAccountDialog() {
+    if (deleteAccountBusy) return
+    setDeleteAccountOpen(false)
+    setDeleteAccountError('')
+  }
+
+  async function deleteAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const element = event.currentTarget
+    const form = new FormData(element)
+    const password = String(form.get('password') ?? '')
+    const confirmation = String(form.get('confirmation') ?? '')
+
+    setDeleteAccountError('')
+    if (confirmation !== 'EXCLUIR') {
+      setDeleteAccountError('Digite EXCLUIR exatamente como mostrado para confirmar.')
+      return
+    }
+
+    setDeleteAccountBusy(true)
+    try {
+      await api.request('delete-account', 'POST', { password, confirmation })
+      setUser(null)
+      setData({ transactions: [], debts: [], goals: [] })
+      setIncomes([])
+      setEditing(null)
+      setSelectedDebtId(null)
+      setDebtPayments([])
+      setBudgets([])
+      setSelectedMonth(currentMonthKey())
+      setView('overview')
+      setMenu(false)
+      setPasswordOpen(false)
+      setPasswordError('')
+      setPasswordChanged(false)
+      setDeleteAccountOpen(false)
+      setDeleteAccountError('')
+      setRegister(false)
+      setError('')
+      setNotice('Conta excluída com sucesso. Seus dados financeiros foram removidos.')
+    } catch (e) {
+      setDeleteAccountError((e as Error).message)
+    } finally {
+      setDeleteAccountBusy(false)
+    }
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -759,9 +823,10 @@ export function App() {
               </button>
             </form>
 
-            <button className="switch-auth" onClick={() => { setRegister(!register); setError('') }}>
+            <button className="switch-auth" onClick={() => { setRegister(!register); setError(''); setNotice('') }}>
               {register ? 'Já tenho uma conta' : 'Ainda não tenho conta'}
             </button>
+            {notice && <p role="status" className="alert alert--success">{notice}</p>}
             {error && <p role="alert" className="alert alert--error">{error}</p>}
           </div>
         </section>
@@ -825,6 +890,10 @@ export function App() {
           <button className="logout-button account-action-button" onClick={openPasswordDialog}>
             <Icon name="shield" size={18} />
             Alterar senha
+          </button>
+          <button className="logout-button delete-account-button" onClick={openDeleteAccountDialog}>
+            <Icon name="trash" size={18} />
+            Excluir conta
           </button>
           <button className="logout-button" onClick={logout}>
             <Icon name="logout" size={18} />
@@ -1644,6 +1713,54 @@ export function App() {
                 </div>
               </form>
             )}
+          </section>
+        </div>
+      )}
+
+      {deleteAccountOpen && (
+        <div className="security-modal-backdrop" role="presentation" onMouseDown={event => {
+          if (event.target === event.currentTarget) closeDeleteAccountDialog()
+        }}>
+          <section className="security-modal security-modal--danger" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
+            <div className="security-modal__header">
+              <div>
+                <span className="panel__eyebrow danger-eyebrow">ÁREA DE RISCO</span>
+                <h2 id="delete-account-title">Excluir conta</h2>
+                <p>Esta ação remove definitivamente seus gastos, receitas, dívidas, pagamentos, metas, orçamentos e sessões.</p>
+              </div>
+              <button className="icon-action" type="button" onClick={closeDeleteAccountDialog} aria-label="Fechar exclusão de conta">
+                <Icon name="close" size={19} />
+              </button>
+            </div>
+
+            <form className="security-form" onSubmit={deleteAccount}>
+              <div className="danger-warning">
+                <Icon name="trash" size={19} />
+                <div>
+                  <strong>Esta ação não pode ser desfeita.</strong>
+                  <span>Confirme sua senha e digite EXCLUIR no campo abaixo.</span>
+                </div>
+              </div>
+
+              <label>
+                <span>Senha atual</span>
+                <input name="password" type="password" minLength={12} maxLength={128} autoComplete="current-password" required />
+              </label>
+              <label>
+                <span>Confirmação</span>
+                <input name="confirmation" type="text" placeholder="EXCLUIR" autoComplete="off" required />
+              </label>
+
+              {deleteAccountError && <div className="security-error" role="alert">{deleteAccountError}</div>}
+
+              <div className="form-actions">
+                <button className="danger-button primary--full" disabled={deleteAccountBusy}>
+                  {deleteAccountBusy ? 'Excluindo…' : 'Excluir minha conta'}
+                  {!deleteAccountBusy && <Icon name="trash" size={17} />}
+                </button>
+                <button className="secondary-button" type="button" onClick={closeDeleteAccountDialog} disabled={deleteAccountBusy}>Cancelar</button>
+              </div>
+            </form>
           </section>
         </div>
       )}
