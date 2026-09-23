@@ -64,6 +64,18 @@ const shiftMonthKey = (monthKey, offset) => {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
 };
 
+const monthBounds = monthKey => {
+  const [year, month] = monthKey.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return {
+    start:`${monthKey}-01`,
+    end:`${monthKey}-${String(lastDay).padStart(2,'0')}`,
+  };
+};
+
+const effectiveIncomeEnd = entry =>
+  entry.activeUntil ?? (!entry.active ? entry.updatedAt?.slice(0,10) || entry.activeFrom : null);
+
 const moneyText = value =>
   Number(value).toLocaleString('pt-BR', {style:'currency',currency:'BRL'});
 
@@ -145,11 +157,116 @@ const normalizeBudget = row => ({
 export class FinanceRepository {
   constructor(database) { this.db = database; }
 
+  async dashboard(user, month) {
+    const monthKey = monthOnly(month);
+    const [transactions, debts, goals, incomes, budgets] = await Promise.all([
+      this.list(user, 'transactions'),
+      this.listDebts(user),
+      this.list(user, 'goals'),
+      this.listIncomes(user),
+      this.listBudgets(user, monthKey),
+    ]);
+
+    const calculateMonth = key => {
+      const {start:monthStart,end:monthEnd} = monthBounds(key);
+      const belongsToMonth = raw => Boolean(raw && raw.slice(0,7) === key);
+      const monthly = transactions.filter(entry => belongsToMonth(entry.transactionDate));
+      const spent = monthly.reduce((total, entry) => total + entry.value, 0);
+      const activeSalaries = incomes.filter(entry => {
+        const activeUntil = effectiveIncomeEnd(entry);
+        return entry.type === 'salary'
+          && entry.activeFrom <= monthEnd
+          && (!activeUntil || activeUntil >= monthStart);
+      });
+      const salary = activeSalaries.reduce((total, entry) => total + entry.value, 0);
+      const monthlyExtras = incomes.filter(entry => entry.type === 'extra' && belongsToMonth(entry.receivedAt));
+      const extras = monthlyExtras.reduce((total, entry) => total + entry.value, 0);
+      return {
+        monthly,
+        spent,
+        activeSalaries,
+        salary,
+        monthlyExtras,
+        extras,
+        income:salary + extras,
+      };
+    };
+
+    const current = calculateMonth(monthKey);
+    const debt = debts.reduce((total, entry) => total + entry.currentBalance, 0);
+    const debtOriginal = debts.reduce((total, entry) => total + entry.originalAmount, 0);
+    const debtPaid = debts.reduce((total, entry) => total + entry.paidAmount, 0);
+    const saved = goals.reduce((total, entry) => total + entry.saved, 0);
+    const targets = goals.reduce((total, entry) => total + entry.target, 0);
+
+    const categoriesData = categories.map(category => {
+      const total = current.monthly
+        .filter(entry => entry.category === category)
+        .reduce((sum, entry) => sum + entry.value, 0);
+      return {
+        category,
+        total,
+        share:current.spent > 0 ? (total / current.spent) * 100 : 0,
+      };
+    }).filter(item => item.total > 0);
+
+    const budgetData = categories.map(category => {
+      const budget = budgets.find(item => item.category === category) ?? null;
+      const categorySpent = current.monthly
+        .filter(entry => entry.category === category)
+        .reduce((sum, entry) => sum + entry.value, 0);
+      const limit = budget?.limit ?? 0;
+      return {
+        category,
+        budget,
+        limit,
+        spent:categorySpent,
+        remaining:limit - categorySpent,
+        usage:limit > 0 ? (categorySpent / limit) * 100 : 0,
+      };
+    });
+    const budgetTotal = budgetData.reduce((total, item) => total + item.limit, 0);
+    const budgetedSpent = budgetData
+      .filter(item => item.limit > 0)
+      .reduce((total, item) => total + item.spent, 0);
+
+    const historyData = Array.from({length:6},(_,index) => shiftMonthKey(monthKey,index-5))
+      .map(key => {
+        const snapshot = calculateMonth(key);
+        return {
+          monthKey:key,
+          income:snapshot.income,
+          expenses:snapshot.spent,
+          balance:snapshot.income - snapshot.spent,
+        };
+      });
+
+    return {
+      month:monthKey,
+      ...current,
+      balance:current.income - current.spent,
+      debt,
+      debtOriginal,
+      debtPaid,
+      debtProgress:debtOriginal > 0 ? (debtPaid / debtOriginal) * 100 : 0,
+      debtMonths:current.income > 0 ? debt / current.income : 0,
+      saved,
+      targets,
+      goalProgress:targets > 0 ? (saved / targets) * 100 : 0,
+      categoriesData,
+      budgetData,
+      budgetTotal,
+      budgetedSpent,
+      budgetRemaining:budgetTotal - budgetedSpent,
+      budgetUsage:budgetTotal > 0 ? (budgetedSpent / budgetTotal) * 100 : 0,
+      historyData,
+    };
+  }
+
   async insights(user, month) {
     const monthKey = monthOnly(month);
     const previousMonth = shiftMonthKey(monthKey, -1);
-    const monthStart = `${monthKey}-01`;
-    const monthEnd = `${monthKey}-31`;
+    const {start:monthStart,end:monthEnd} = monthBounds(monthKey);
 
     const [transactions, debts, goals, incomes, budgets] = await Promise.all([
       this.list(user, 'transactions'),
@@ -165,9 +282,12 @@ export class FinanceRepository {
     const previousSpent = previousTransactions.reduce((total, entry) => total + entry.value, 0);
 
     const salary = incomes
-      .filter(entry => entry.type === 'salary'
-        && entry.activeFrom <= monthEnd
-        && (!entry.activeUntil || entry.activeUntil >= monthStart))
+      .filter(entry => {
+        const activeUntil = effectiveIncomeEnd(entry);
+        return entry.type === 'salary'
+          && entry.activeFrom <= monthEnd
+          && (!activeUntil || activeUntil >= monthStart);
+      })
       .reduce((total, entry) => total + entry.value, 0);
     const extras = incomes
       .filter(entry => entry.type === 'extra' && entry.receivedAt?.slice(0, 7) === monthKey)
@@ -965,6 +1085,7 @@ export class FinanceApi {
       const user = await this.auth.authenticate(token);
       if (path === '/api/me' && req.method === 'GET') return send(200,(await this.repository.db.query('SELECT id,email FROM users WHERE id=?', [user])).recordset[0]);
       if (path === '/api/export' && req.method === 'GET') return send(200,await this.repository.exportUserData(user));
+      if (path === '/api/dashboard' && req.method === 'GET') return send(200,await this.repository.dashboard(user,url.searchParams.get('month')));
       if (path === '/api/insights' && req.method === 'GET') return send(200,await this.repository.insights(user,url.searchParams.get('month')));
       if (path === '/api/logout' && req.method === 'POST') {
         await this.auth.logout(token);
