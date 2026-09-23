@@ -1253,8 +1253,15 @@ export class FinanceRepository {
 
 export class AuthService {
   constructor(userRepository) {
-    this.users = userRepository instanceof UserRepository ? userRepository : userRepository.users;
-    if (!this.users) throw new TypeError('AuthService requer um UserRepository.');
+    this.users = userRepository?.users ?? userRepository;
+    const requiredMethods = [
+      'findSessionUser','create','findByEmail','findCredentialsById',
+      'purgeExpiredSessions','createSession','updatePasswordAndRevokeOtherSessions',
+      'deleteAccount','logout',
+    ];
+    if (!this.users || requiredMethods.some(method => typeof this.users[method] !== 'function')) {
+      throw new TypeError('AuthService requer um repositório de usuários compatível.');
+    }
     this.attempts = new Map();
     this.loginWindowMs = 10 * 60 * 1000;
     this.maxLoginFailures = 20;
