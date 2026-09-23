@@ -337,7 +337,9 @@ export class FinanceRepository {
     const amount = cents(data.value);
     if (type === 'salary') {
       const activeFrom = dateOnly(data.activeFrom ?? data.receivedAt ?? today());
-      const activeUntil = dateOnly(data.activeUntil, {optional:true});
+      const active = data.active === false ? 0 : 1;
+      const requestedActiveUntil = dateOnly(data.activeUntil, {optional:true});
+      const activeUntil = !active && !requestedActiveUntil ? today() : requestedActiveUntil;
       if (activeUntil && activeUntil < activeFrom) throw new HttpError(400, 'A data final não pode ser anterior à data inicial.');
       return {
         name,
@@ -346,7 +348,7 @@ export class FinanceRepository {
         recurrence: 'monthly',
         activeFrom,
         activeUntil,
-        active: data.active === false ? 0 : 1,
+        active,
         receivedAt: `${activeFrom} 12:00:00`,
       };
     }
