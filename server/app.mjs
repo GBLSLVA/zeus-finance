@@ -5,6 +5,7 @@ import { text } from './domain/finance-values.mjs';
 import { BudgetRepository } from './repositories/budget-repository.mjs';
 import { DebtRepository } from './repositories/debt-repository.mjs';
 import { EntryRepository } from './repositories/entry-repository.mjs';
+import { GoalRepository } from './repositories/goal-repository.mjs';
 import { IncomeRepository } from './repositories/income-repository.mjs';
 import { RecurringExpenseRepository } from './repositories/recurring-expense-repository.mjs';
 import { UserRepository } from './repositories/user-repository.mjs';
@@ -39,6 +40,7 @@ export class FinanceRepository {
     this.db = database;
     this.users = new UserRepository(database);
     this.entries = new EntryRepository(database);
+    this.goals = new GoalRepository(database);
     this.debts = new DebtRepository(database);
     this.budgets = new BudgetRepository(database);
     this.recurring = new RecurringExpenseRepository(database);
@@ -78,22 +80,38 @@ export class FinanceRepository {
 
   async list(user, kind) {
     if (kind === 'debts') return this.debts.list(user);
+    if (kind === 'goals') return this.goals.list(user);
     return this.entries.list(user,kind);
   }
 
   async add(user, kind, data) {
     if (kind === 'debts') return this.debts.add(user,data);
+    if (kind === 'goals') return this.goals.add(user,data);
     return this.entries.add(user,kind,data);
   }
 
   async update(user, kind, id, data) {
     if (kind === 'debts') return this.debts.update(user,id,data);
+    if (kind === 'goals') return this.goals.update(user,id,data);
     return this.entries.update(user,kind,id,data);
   }
 
   async remove(user, kind, id) {
     if (kind === 'debts') return this.debts.remove(user,id);
+    if (kind === 'goals') return this.goals.remove(user,id);
     return this.entries.remove(user,kind,id);
+  }
+
+  async listGoalMovements(user, goalId) {
+    return this.goals.listMovements(user,goalId);
+  }
+
+  async addGoalMovement(user, goalId, data) {
+    return this.goals.addMovement(user,goalId,data);
+  }
+
+  async removeGoalMovement(user, goalId, movementId) {
+    return this.goals.removeMovement(user,goalId,movementId);
   }
 
   async listDebts(user) {
@@ -457,6 +475,16 @@ export class FinanceApi {
         if (req.method === 'POST' && !id) return send(201,await this.repository.addIncome(user,await this.body(req)));
         if (req.method === 'PUT' && id) return send(200,await this.repository.updateIncome(user,id,await this.body(req)));
         if (req.method === 'DELETE' && id) { await this.repository.removeIncome(user,id); return send(200,{}); }
+        throw new HttpError(405,'Método não permitido.');
+      }
+
+      const goalMovementRoute = /^\/api\/goals\/(\d+)\/movements(?:\/(\d+))?$/.exec(path);
+      if (goalMovementRoute) {
+        const goalId = Number(goalMovementRoute[1]);
+        const movementId = goalMovementRoute[2] ? Number(goalMovementRoute[2]) : null;
+        if (req.method === 'GET' && !movementId) return send(200,await this.repository.listGoalMovements(user,goalId));
+        if (req.method === 'POST' && !movementId) return send(201,await this.repository.addGoalMovement(user,goalId,await this.body(req)));
+        if (req.method === 'DELETE' && movementId) return send(200,await this.repository.removeGoalMovement(user,goalId,movementId));
         throw new HttpError(405,'Método não permitido.');
       }
 
