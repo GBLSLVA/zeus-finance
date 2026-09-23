@@ -8,7 +8,6 @@ import { GoalsPage } from './features/goals/GoalsPage'
 import { OverviewPage } from './features/overview/OverviewPage'
 import { TransactionsPage } from './features/transactions/TransactionsPage'
 import {
-  categories,
   descriptions,
   emptyDashboard,
   titles,
@@ -36,7 +35,6 @@ import {
   effectiveIncomeEnd,
   formatMonth,
   money,
-  percent,
   shiftMonthKey,
 } from './utils/finance'
 
