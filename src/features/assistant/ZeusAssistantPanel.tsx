@@ -34,16 +34,14 @@ export function ZeusAssistantPanel({
     <section className="panel assistant-panel" aria-labelledby="zeus-assistant-title">
       <div className="panel__header assistant-panel__header">
         <div>
-          <span className="panel__eyebrow">PERGUNTE AO ZEUS</span>
-          <h2 id="zeus-assistant-title">Seu painel também responde</h2>
-          <p>Faça perguntas sobre os números de {monthLabel.toLowerCase()} usando os dados já registrados na sua conta.</p>
+          <h2 id="zeus-assistant-title">Converse com seus dados</h2>
+          <p>Faça perguntas sobre {monthLabel.toLowerCase()} usando apenas os dados registrados na sua conta. Recurso em testes.</p>
         </div>
-        <span className="insights-badge">Beta</span>
       </div>
 
       {answer && (
         <div className="assistant-answer" role="status">
-          <span>ZEUS</span>
+          <strong>Resposta do ZEUS</strong>
           <p>{answer.answer}</p>
         </div>
       )}

@@ -11,17 +11,14 @@ export function ZeusInsightsPanel({ monthLabel, summary, insights }: Props) {
     <section className="panel insights-panel" aria-labelledby="zeus-insights-title">
       <div className="panel__header insights-panel__header">
         <div>
-          <span className="panel__eyebrow">ANÁLISE AUTOMÁTICA</span>
           <h2 id="zeus-insights-title">ZEUS Insights</h2>
-          <p>Leituras automáticas do seu comportamento financeiro em {monthLabel.toLowerCase()}.</p>
+          <p>Resumo, tendências e pontos de atenção de {monthLabel.toLowerCase()}. Análises automáticas em teste.</p>
         </div>
-        <span className="insights-badge">Beta</span>
       </div>
 
       {summary && (
         <article className={`monthly-summary monthly-summary--${summary.tone}`}>
           <div className="monthly-summary__body">
-            <span className="monthly-summary__label">RESUMO DO MÊS</span>
             <h3>{summary.title}</h3>
             <p>{summary.message}</p>
           </div>

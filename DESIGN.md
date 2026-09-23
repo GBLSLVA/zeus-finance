@@ -55,7 +55,7 @@ Guidance:
 - Primary financial amount: 34–52px where it is the page focus.
 - Card/panel title: 17–19px.
 - Body: 14–15px.
-- Labels/meta: 10–13px depending on density; never use tiny text for primary actions or required form information.
+- Labels/meta: 12–13px. Avoid interface text below 12px; secondary text must remain comfortably readable.
 - Currency and metrics use tabular numerals.
 
 ## Hierarchy
@@ -87,6 +87,8 @@ Avoid oversized pill-shaped cards.
 - Avoid broad decorative shadows.
 - A shadow is allowed when it communicates elevation, such as the mobile navigation drawer.
 - Avoid card-inside-card compositions.
+- Avoid eyebrow labels above headings when they repeat the heading.
+- Status badges are reserved for meaningful state, not decoration.
 - Prefer row dividers and spacing inside panels.
 
 ## Navigation
@@ -95,6 +97,7 @@ Avoid oversized pill-shaped cards.
 - Active navigation uses a restrained raised surface and border.
 - Accent color appears on the active icon rather than as a thick side stripe.
 - Record counts are secondary metadata.
+- Do not repeat the product name above every page title; show context only when it adds information.
 
 ## Buttons and forms
 

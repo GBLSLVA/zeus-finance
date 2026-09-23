@@ -1013,7 +1013,7 @@ export function App() {
               <Icon name="menu" size={21} />
             </button>
             <div>
-              <span className="section-kicker">{view === 'overview' ? monthLabel : 'ZEUS FINANCE'}</span>
+              {view === 'overview' && <span className="section-kicker">{monthLabel}</span>}
               <h1>{titles[view]}</h1>
               <p>{descriptions[view]}</p>
             </div>
@@ -1134,7 +1134,6 @@ export function App() {
             <section className="panel records-panel">
               <div className="panel__header records-panel__header">
                 <div>
-                  <span className="panel__eyebrow">ENTRADAS</span>
                   <h2>Receitas cadastradas</h2>
                 </div>
                 <span className="records-count">{incomes.length} {incomes.length === 1 ? 'item' : 'itens'}</span>
@@ -1184,7 +1183,6 @@ export function App() {
             </section>
 
             <aside className="panel record-form-panel">
-              <span className="panel__eyebrow">{editing?.kind === 'incomes' ? 'EDITAR RECEITA' : 'NOVA RECEITA'}</span>
               <h2>{editing?.kind === 'incomes' ? 'Atualizar entrada' : 'Adicionar entrada'}</h2>
               <p>Salários são recorrentes durante o período de vigência. Receitas extras entram somente no mês informado.</p>
               <form key={`incomes-${editing?.kind === 'incomes' ? editing.entry.id : 'new'}`} onSubmit={save}>
@@ -1222,7 +1220,6 @@ export function App() {
           <section className="security-modal" role="dialog" aria-modal="true" aria-labelledby="change-password-title">
             <div className="security-modal__header">
               <div>
-                <span className="panel__eyebrow">SEGURANÇA DA CONTA</span>
                 <h2 id="change-password-title">Alterar senha</h2>
                 <p>Ao salvar, as outras sessões da sua conta serão encerradas.</p>
               </div>

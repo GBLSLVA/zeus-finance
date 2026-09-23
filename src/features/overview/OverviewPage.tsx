@@ -53,7 +53,6 @@ export function OverviewPage({
 <div className="dashboard">
             <section className="dashboard-hero">
               <div className="dashboard-hero__main">
-                <div className="hero-icon"><Icon name="income" size={22} /></div>
                 <div>
                   <span>Receita total do período</span>
                   <strong>{money(dashboard.income)}</strong>
@@ -125,7 +124,6 @@ export function OverviewPage({
               <article className="panel spending-panel">
                 <div className="panel__header">
                   <div>
-                    <span className="panel__eyebrow">DISTRIBUIÇÃO</span>
                     <h2>Gastos por categoria</h2>
                   </div>
                   <span className="period-chip"><Icon name="calendar" size={15} /> {monthLabel}</span>
@@ -181,7 +179,6 @@ export function OverviewPage({
               <article className="panel budget-panel">
                 <div className="panel__header">
                   <div>
-                    <span className="panel__eyebrow">PLANEJAMENTO</span>
                     <h2>Orçamento mensal</h2>
                   </div>
                   <button className="link-button" onClick={() => navigate('budgets')}>
@@ -239,7 +236,6 @@ export function OverviewPage({
               <article className="panel debt-panel">
                 <div className="panel__header">
                   <div>
-                    <span className="panel__eyebrow">COMPROMISSOS</span>
                     <h2>Dívidas</h2>
                   </div>
                   <button className="link-button" onClick={() => navigate('debts')}>
@@ -277,7 +273,6 @@ export function OverviewPage({
               <article className="panel goals-panel">
                 <div className="panel__header">
                   <div>
-                    <span className="panel__eyebrow">PROGRESSO</span>
                     <h2>Metas</h2>
                   </div>
                   <button className="link-button" onClick={() => navigate('goals')}>
@@ -330,7 +325,6 @@ export function OverviewPage({
             <section className="panel history-panel">
               <div className="panel__header">
                 <div>
-                  <span className="panel__eyebrow">HISTÓRICO</span>
                   <h2>Últimos 6 meses até {monthLabel.toLowerCase()}</h2>
                 </div>
                 <span className="period-chip"><Icon name="calendar" size={15} /> 6 meses</span>
