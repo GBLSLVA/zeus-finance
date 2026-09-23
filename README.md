@@ -169,18 +169,37 @@ O workflow em `.github/workflows/ci.yml` executa em pushes e pull requests para 
 
 Fluxo principal:
 
-`React -> ApiClient -> FinanceApi -> FinanceRepository -> SQLite local / PostgreSQL em produção`
+`React -> ApiClient -> FinanceApi -> Services/Repositories -> DatabaseAdapter -> SQLite/PostgreSQL`
 
 Responsabilidades:
 
 - **ApiClient:** chamadas HTTP da interface.
-- **FinanceApi:** autenticação, roteamento, validação de origem e respostas HTTP.
-- **FinanceRepository:** regras de persistência e cálculos financeiros oficiais do dashboard e dos insights.
-- **AuthService:** cadastro, login, troca de senha, sessões e proteção contra tentativas excessivas.
-- **SqliteDatabase:** conexão SQLite, queries e migrations.
+- **FinanceApi:** roteamento, validação de origem e respostas HTTP.
+- **FinanceRepository:** fachada atual das regras financeiras; será decomposta por domínio nas próximas refatorações.
+- **UserRepository:** persistência de usuários, credenciais e sessões.
+- **AuthService:** regras de cadastro, login, troca de senha, sessões e proteção contra tentativas excessivas; não executa SQL diretamente.
+- **DatabaseAdapter:** contrato comum da camada de persistência.
+- **SqliteDatabase / PostgresDatabase:** implementações polimórficas do contrato de banco.
+- **src/domain/finance.ts:** tipos e constantes do domínio financeiro usados pelo frontend.
+- **src/utils/finance.ts:** formatação e utilitários de datas/percentuais.
+- **src/components:** componentes visuais reutilizáveis do React.
+
+O projeto usa POO principalmente no backend/domínio e composição funcional no React. Herança é usada apenas onde existe relação de subtipo clara; composição e injeção de dependências são preferidas para evitar acoplamento.
 
 Valores financeiros são armazenados em centavos inteiros.
 O fuso das datas financeiras usa `APP_TIMEZONE`, com `America/Sao_Paulo` como padrão.
+
+## Princípios de arquitetura
+
+A evolução do ZEUS segue estes critérios:
+
+- responsabilidade única: autenticação, persistência, HTTP e interface devem permanecer separados;
+- encapsulamento: services não acessam detalhes internos de outro componente;
+- abstração: regras dependem de contratos estáveis, não de PostgreSQL/SQLite diretamente;
+- polimorfismo: adaptadores de banco podem ser substituídos mantendo a mesma interface;
+- composição sobre herança: classes são combinadas por dependências explícitas;
+- React funcional: componentes React não são convertidos em classes apenas para “usar POO”;
+- refatorações estruturais só entram na `main` depois de testes de API, build, smoke e PostgreSQL.
 
 ## Beta gratuito na nuvem
 

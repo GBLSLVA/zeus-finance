@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import pg from 'pg';
+import { DatabaseAdapter } from './database-adapter.mjs';
 
 const { Pool } = pg;
 
@@ -367,9 +368,9 @@ const postgresMigrations = [
   },
 ];
 
-export class SqliteDatabase {
+export class SqliteDatabase extends DatabaseAdapter {
   constructor(path) {
-    this.kind = 'sqlite';
+    super('sqlite');
     this.db = new DatabaseSync(path);
     this.db.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;');
     this.db.exec(`
@@ -435,9 +436,30 @@ export const translatePostgresSql = statement => {
     .replace(/\?/g, () => `$${++parameter}`);
 };
 
-export class PostgresDatabase {
+class PostgresTransactionAdapter extends DatabaseAdapter {
+  constructor(client) {
+    super('postgres');
+    this.client = client;
+  }
+
+  async query(statement, values = []) {
+    const result = await this.client.query(translatePostgresSql(statement), values);
+    return {
+      recordset: result.rows,
+      rowsAffected: [Number(result.rowCount ?? 0)],
+    };
+  }
+
+  async transaction(work) {
+    return work(this);
+  }
+
+  async close() {}
+}
+
+export class PostgresDatabase extends DatabaseAdapter {
   constructor(connectionString) {
-    this.kind = 'postgres';
+    super('postgres');
     this.pool = new Pool({
       connectionString,
       max: Number(process.env.DB_POOL_MAX ?? 5),
@@ -485,16 +507,7 @@ export class PostgresDatabase {
 
   async transaction(work) {
     const client = await this.pool.connect();
-    const database = {
-      kind: 'postgres',
-      query: async (statement, values = []) => {
-        const result = await client.query(translatePostgresSql(statement), values);
-        return {
-          recordset: result.rows,
-          rowsAffected: [Number(result.rowCount ?? 0)],
-        };
-      },
-    };
+    const database = new PostgresTransactionAdapter(client);
 
     try {
       await client.query('BEGIN');
