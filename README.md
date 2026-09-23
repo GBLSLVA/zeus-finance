@@ -161,6 +161,10 @@ Fluxo principal:
 
 Responsabilidades:
 
+- **App:** orquestra estado, navegação e ações das telas.
+- **components:** componentes visuais reutilizáveis, como ícones e cards de métricas.
+- **finance:** formatação, períodos e constantes financeiras usadas pela interface.
+- **types:** contratos TypeScript compartilhados da aplicação.
 - **ApiClient:** chamadas HTTP da interface.
 - **FinanceApi:** autenticação, roteamento, validação de origem e respostas HTTP.
 - **FinanceRepository:** regras de persistência de registros e receitas.
