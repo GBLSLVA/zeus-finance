@@ -115,7 +115,6 @@ O ZEUS não precisa dessas informações.
 ## 8. Próximas evoluções depois do beta
 
 - recuperação de senha por e-mail;
-- exclusão de conta e dados;
 - política de privacidade;
 - backup exportável;
 - logs estruturados;
