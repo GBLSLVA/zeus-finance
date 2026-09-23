@@ -318,6 +318,15 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal(assistantBalance.data.intent,'balance');
     assert.match(assistantBalance.data.answer,/R\$\s*1\.630,00/);
 
+    const assistantRecurring = await call('assistant','POST',{
+      month:'2026-09',
+      question:'Quanto tenho de gastos recorrentes?',
+    },first.cookie);
+    assert.equal(assistantRecurring.status,200);
+    assert.equal(assistantRecurring.data.intent,'recurring-expenses');
+    assert.match(assistantRecurring.data.answer,/R\$\s*120,00/);
+    assert.match(assistantRecurring.data.answer,/R\$\s*1\.510,00/);
+
     const assistantCategory = await call('assistant','POST',{
       month:'2026-09',
       question:'Quanto gastei com comida?',
