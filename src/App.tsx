@@ -60,6 +60,23 @@ type EditState =
   | { kind: 'incomes'; entry: Income }
   | null
 type User = { id: number; email: string }
+type InsightTone = 'warning' | 'positive' | 'info'
+type Insight = {
+  id: string
+  type: 'balance' | 'comparison' | 'category' | 'budget' | 'debt' | 'goal' | 'onboarding'
+  tone: InsightTone
+  title: string
+  message: string
+  value: number | null
+}
+type InsightsResponse = {
+  month: string
+  income: number
+  spent: number
+  balance: number
+  previousSpent: number
+  items: Insight[]
+}
 
 const titles: Record<View, string> = {
   overview: 'Visão geral',
@@ -208,6 +225,7 @@ export function App() {
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false)
   const [deleteAccountBusy, setDeleteAccountBusy] = useState(false)
   const [deleteAccountError, setDeleteAccountError] = useState('')
+  const [insights, setInsights] = useState<Insight[]>([])
 
   const load = async () => {
     const [transactions, debts, goals, incomeEntries] = await Promise.all([
@@ -248,6 +266,28 @@ export function App() {
   }, [user, selectedMonth])
 
   useEffect(() => {
+    if (!user) {
+      setInsights([])
+      return
+    }
+
+    let active = true
+    api.request<InsightsResponse>(`insights?month=${selectedMonth}`)
+      .then(result => {
+        if (active) setInsights(result.items)
+      })
+      .catch(e => {
+        if (active && (e as { status?: number }).status !== 401) {
+          setError('Não foi possível atualizar os insights financeiros.')
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [user, selectedMonth, data, incomes, budgets])
+
+  useEffect(() => {
     const handleUnauthorized = () => {
       if (!user) return
       setUser(null)
@@ -257,6 +297,7 @@ export function App() {
       setSelectedDebtId(null)
       setDebtPayments([])
       setBudgets([])
+      setInsights([])
       setSelectedMonth(currentMonthKey())
       setView('overview')
       setPasswordOpen(false)
@@ -309,6 +350,7 @@ export function App() {
       setSelectedDebtId(null)
       setDebtPayments([])
       setBudgets([])
+      setInsights([])
       setSelectedMonth(currentMonthKey())
       setView('overview')
       setPasswordOpen(false)
@@ -422,6 +464,7 @@ export function App() {
       setSelectedDebtId(null)
       setDebtPayments([])
       setBudgets([])
+      setInsights([])
       setSelectedMonth(currentMonthKey())
       setView('overview')
       setMenu(false)
@@ -1026,6 +1069,29 @@ export function App() {
                 icon="debt"
                 tone="warning"
               />
+            </section>
+
+            <section className="panel insights-panel" aria-labelledby="zeus-insights-title">
+              <div className="panel__header insights-panel__header">
+                <div>
+                  <span className="panel__eyebrow">ANÁLISE AUTOMÁTICA</span>
+                  <h2 id="zeus-insights-title">ZEUS Insights</h2>
+                  <p>Leituras automáticas do seu comportamento financeiro em {monthLabel.toLowerCase()}.</p>
+                </div>
+                <span className="insights-badge">Beta</span>
+              </div>
+
+              <div className="insights-grid">
+                {insights.map(insight => (
+                  <article className={`insight-card insight-card--${insight.tone}`} key={insight.id}>
+                    <span className="insight-card__signal" aria-hidden="true" />
+                    <div>
+                      <strong>{insight.title}</strong>
+                      <p>{insight.message}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
             </section>
 
             <section className="dashboard-grid">
