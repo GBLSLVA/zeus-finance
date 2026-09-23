@@ -9,8 +9,9 @@ import {
 } from './finance-service-utils.mjs';
 
 export class InsightService {
-  constructor({entries,debts,incomes,budgets}) {
+  constructor({entries,goals,debts,incomes,budgets}) {
     this.entries = entries;
+    this.goals = goals;
     this.debts = debts;
     this.incomes = incomes;
     this.budgets = budgets;
@@ -24,7 +25,7 @@ export class InsightService {
     const [transactions, debts, goals, incomes, budgets] = await Promise.all([
       this.entries.list(user,'transactions'),
       this.debts.list(user),
-      this.entries.list(user,'goals'),
+      this.goals.list(user),
       this.incomes.list(user),
       this.budgets.list(user,monthKey),
     ]);
