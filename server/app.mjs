@@ -1,29 +1,21 @@
 import { createServer } from 'node:http';
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
+import { HttpError } from './http-error.mjs';
+import {
+  categories,
+  cents,
+  dateOnly,
+  monthOnly,
+  normalizeBudget,
+  normalizeIncome,
+  text,
+  today,
+} from './domain/finance-values.mjs';
+import { BudgetRepository } from './repositories/budget-repository.mjs';
+import { IncomeRepository } from './repositories/income-repository.mjs';
 import { UserRepository } from './repositories/user-repository.mjs';
 
-export class HttpError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
-}
-
-const text = (value, max = 120) => {
-  if (typeof value !== 'string' || !value.trim() || value.length > max) throw new HttpError(400, 'Texto inválido.');
-  return value.trim();
-};
-
-const cents = (value, allowZero = false) => {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < (allowZero ? 0 : 0.01) || value > 100000000) throw new HttpError(400, 'Valor inválido.');
-  return Math.round(value * 100);
-};
-
-const dateOnly = (value, {optional = false} = {}) => {
-  if ((value === null || value === undefined || value === '') && optional) return null;
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new HttpError(400, 'Data inválida.');
-  const [year, month, day] = value.split('-').map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) throw new HttpError(400, 'Data inválida.');
-  return value;
-};
+export { HttpError } from './http-error.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const defaultSessionMaxAgeSeconds = 24 * 60 * 60;
@@ -44,21 +36,6 @@ const verifyPassword = (password, stored) => {
   const expected = Buffer.from(safeHash, 'hex');
   return expected.length === derived.length && timingSafeEqual(derived, expected);
 };
-const appTimeZone = process.env.APP_TIMEZONE ?? 'America/Sao_Paulo';
-const today = () => {
-  const parts = new Intl.DateTimeFormat('en-US', {timeZone: appTimeZone, year: 'numeric', month: '2-digit', day: '2-digit'}).formatToParts(new Date());
-  const values = Object.fromEntries(parts.filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-};
-const categories = ['Casa','Comida','Transporte','Lazer','Outros'];
-
-const monthOnly = value => {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}$/.test(value)) throw new HttpError(400, 'Mês inválido.');
-  const [year, month] = value.split('-').map(Number);
-  if (year < 2000 || year > 2200 || month < 1 || month > 12) throw new HttpError(400, 'Mês inválido.');
-  return value;
-};
-
 const shiftMonthKey = (monthKey, offset) => {
   const [year, month] = monthKey.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1 + offset, 1));
@@ -115,19 +92,6 @@ const normalizeEntry = row => ({
   recurringMonth: row.recurring_month ?? null,
 });
 
-const normalizeIncome = row => ({
-  id: row.id,
-  name: row.name,
-  type: row.type,
-  value: row.amount / 100,
-  recurrence: row.recurrence ?? (row.type === 'salary' ? 'monthly' : 'once'),
-  activeFrom: row.active_from ?? row.received_at?.slice(0, 10),
-  activeUntil: row.active_until ?? null,
-  active: Boolean(row.active ?? 1),
-  receivedAt: row.received_at,
-  updatedAt: row.updated_at ?? row.received_at,
-});
-
 const normalizeDebt = row => ({
   id: row.id,
   name: row.name,
@@ -159,15 +123,6 @@ const normalizeDebtPayment = row => ({
   createdAt: row.created_at,
 });
 
-const normalizeBudget = row => ({
-  id: row.id,
-  month: row.month,
-  category: row.category,
-  limit: row.limit_amount / 100,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-});
-
 const normalizeRecurringExpense = row => ({
   id: row.id,
   name: row.name,
@@ -185,6 +140,8 @@ export class FinanceRepository {
   constructor(database) {
     this.db = database;
     this.users = new UserRepository(database);
+    this.budgets = new BudgetRepository(database);
+    this.incomes = new IncomeRepository(database);
   }
 
   async dashboard(user, month) {
@@ -1002,34 +959,15 @@ export class FinanceRepository {
   }
 
   async listBudgets(user, month) {
-    const result = await this.db.query(
-      'SELECT * FROM budgets WHERE user_id=? AND month=? ORDER BY category,id',
-      [user, monthOnly(month)],
-    );
-    return result.recordset.map(normalizeBudget);
+    return this.budgets.list(user,month);
   }
 
   async upsertBudget(user, data) {
-    const month = monthOnly(data.month);
-    const category = text(data.category);
-    if (!categories.includes(category)) throw new HttpError(400, 'Categoria inválida.');
-    const limit = cents(data.limit);
-    const result = await this.db.query(
-      `INSERT INTO budgets(user_id,month,category,limit_amount,updated_at)
-       VALUES(?,?,?,?,CURRENT_TIMESTAMP)
-       ON CONFLICT(user_id,month,category)
-       DO UPDATE SET limit_amount=excluded.limit_amount,updated_at=CURRENT_TIMESTAMP
-       RETURNING id`,
-      [user, month, category, limit],
-    );
-    const budgets = await this.listBudgets(user, month);
-    return budgets.find(row => row.id === result.recordset[0].id)
-      ?? budgets.find(row => row.category === category);
+    return this.budgets.upsert(user,data);
   }
 
   async removeBudget(user, id) {
-    const result = await this.db.query('DELETE FROM budgets WHERE user_id=? AND id=?', [user,id]);
-    if (!result.rowsAffected[0]) throw new HttpError(404, 'Orçamento não encontrado.');
+    return this.budgets.remove(user,id);
   }
 
   async listRecurringExpenses(user) {
@@ -1181,73 +1119,23 @@ export class FinanceRepository {
   }
 
   async listIncomes(user) {
-    const result = await this.db.query(
-      'SELECT * FROM incomes WHERE user_id=? ORDER BY CASE type WHEN ? THEN 0 ELSE 1 END, COALESCE(active_from,substr(received_at,1,10)) DESC, id DESC',
-      [user, 'salary'],
-    );
-    return result.recordset.map(normalizeIncome);
+    return this.incomes.list(user);
   }
 
   incomeFields(data) {
-    const name = text(data.name);
-    const type = data.type === 'salary' || data.type === 'extra' ? data.type : null;
-    if (!type) throw new HttpError(400, 'Tipo de receita inválido.');
-    const amount = cents(data.value);
-    if (type === 'salary') {
-      const activeFrom = dateOnly(data.activeFrom ?? data.receivedAt ?? today());
-      const active = data.active === false ? 0 : 1;
-      const requestedActiveUntil = dateOnly(data.activeUntil, {optional:true});
-      const deactivationDate = today();
-      const activeUntil = !active && !requestedActiveUntil
-        ? (deactivationDate < activeFrom ? activeFrom : deactivationDate)
-        : requestedActiveUntil;
-      if (activeUntil && activeUntil < activeFrom) throw new HttpError(400, 'A data final não pode ser anterior à data inicial.');
-      return {
-        name,
-        type,
-        amount,
-        recurrence: 'monthly',
-        activeFrom,
-        activeUntil,
-        active,
-        receivedAt: `${activeFrom} 12:00:00`,
-      };
-    }
-    const received = dateOnly(data.receivedAt ?? today());
-    return {
-      name,
-      type,
-      amount,
-      recurrence: 'once',
-      activeFrom: received,
-      activeUntil: null,
-      active: 1,
-      receivedAt: `${received} 12:00:00`,
-    };
+    return this.incomes.fields(data);
   }
 
   async addIncome(user, data) {
-    const fields = this.incomeFields(data);
-    const result = await this.db.query(
-      'INSERT INTO incomes(user_id,name,type,amount,received_at,recurrence,active_from,active_until,active,updated_at) VALUES(?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) RETURNING id',
-      [user, fields.name, fields.type, fields.amount, fields.receivedAt, fields.recurrence, fields.activeFrom, fields.activeUntil, fields.active],
-    );
-    return (await this.listIncomes(user)).find(row => row.id === result.recordset[0].id);
+    return this.incomes.add(user,data);
   }
 
   async updateIncome(user, id, data) {
-    const fields = this.incomeFields(data);
-    const result = await this.db.query(
-      'UPDATE incomes SET name=?,type=?,amount=?,received_at=?,recurrence=?,active_from=?,active_until=?,active=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=?',
-      [fields.name, fields.type, fields.amount, fields.receivedAt, fields.recurrence, fields.activeFrom, fields.activeUntil, fields.active, user, id],
-    );
-    if (!result.rowsAffected[0]) throw new HttpError(404, 'Receita não encontrada.');
-    return (await this.listIncomes(user)).find(row => row.id === id);
+    return this.incomes.update(user,id,data);
   }
 
   async removeIncome(user, id) {
-    const result = await this.db.query('DELETE FROM incomes WHERE user_id=? AND id=?', [user, id]);
-    if (!result.rowsAffected[0]) throw new HttpError(404, 'Receita não encontrada.');
+    return this.incomes.remove(user,id);
   }
 }
 
