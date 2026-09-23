@@ -1013,7 +1013,7 @@ export function App() {
               <Icon name="menu" size={21} />
             </button>
             <div>
-              <span className="section-kicker">{view === 'overview' ? monthLabel : 'ZEUS FINANCE'}</span>
+              {view === 'overview' && <span className="section-kicker">{monthLabel}</span>}
               <h1>{titles[view]}</h1>
               <p>{descriptions[view]}</p>
             </div>
