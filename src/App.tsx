@@ -1,16 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from './api'
 import { Icon } from './components/Icon'
-import { MetricCard } from './components/MetricCard'
-import { ZeusAssistantPanel } from './features/assistant/ZeusAssistantPanel'
-import { ZeusInsightsPanel } from './features/insights/ZeusInsightsPanel'
 import { RecurringExpensesPage } from './features/recurring/RecurringExpensesPage'
 import { BudgetPage } from './features/budgets/BudgetPage'
 import { DebtPage } from './features/debts/DebtPage'
 import { OverviewPage } from './features/overview/OverviewPage'
 import {
   categories,
-  categoryColor,
   descriptions,
   emptyDashboard,
   titles,
@@ -38,7 +34,6 @@ import {
   formatMonth,
   money,
   percent,
-  progressPercent,
   shiftMonthKey,
 } from './utils/finance'
 
