@@ -2,6 +2,9 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { api } from './api'
 import { Icon } from './components/Icon'
 import { MetricCard } from './components/MetricCard'
+import { ZeusAssistantPanel } from './features/assistant/ZeusAssistantPanel'
+import { ZeusInsightsPanel } from './features/insights/ZeusInsightsPanel'
+import { RecurringExpensesPage } from './features/recurring/RecurringExpensesPage'
 import {
   categories,
   categoryColor,
@@ -969,96 +972,24 @@ export function App() {
               />
             </section>
 
-            <section className="panel assistant-panel" aria-labelledby="zeus-assistant-title">
-              <div className="panel__header assistant-panel__header">
-                <div>
-                  <span className="panel__eyebrow">PERGUNTE AO ZEUS</span>
-                  <h2 id="zeus-assistant-title">Seu painel também responde</h2>
-                  <p>Faça perguntas sobre os números de {monthLabel.toLowerCase()} usando os dados já registrados na sua conta.</p>
-                </div>
-                <span className="insights-badge">Beta</span>
-              </div>
+            <ZeusAssistantPanel
+              monthLabel={monthLabel}
+              answer={assistantAnswer}
+              question={assistantQuestion}
+              busy={assistantBusy}
+              onQuestionChange={setAssistantQuestion}
+              onSubmit={askZeus}
+              onSuggestion={suggestion => {
+                setAssistantQuestion(suggestion)
+                void askZeusQuestion(suggestion)
+              }}
+            />
 
-              {assistantAnswer && (
-                <div className="assistant-answer" role="status">
-                  <span>ZEUS</span>
-                  <p>{assistantAnswer.answer}</p>
-                </div>
-              )}
-
-              <form className="assistant-form" onSubmit={askZeus}>
-                <input
-                  value={assistantQuestion}
-                  onChange={event => setAssistantQuestion(event.target.value)}
-                  placeholder="Ex.: Quanto ainda tenho de saldo?"
-                  maxLength={300}
-                  aria-label="Pergunta para o ZEUS"
-                />
-                <button className="primary" type="submit" disabled={assistantBusy || !assistantQuestion.trim()}>
-                  {assistantBusy ? 'Analisando…' : 'Perguntar'}
-                  {!assistantBusy && <Icon name="arrow" size={17} />}
-                </button>
-              </form>
-
-              <div className="assistant-suggestions" aria-label="Sugestões de perguntas">
-                {(assistantAnswer?.suggestions ?? [
-                  'Quanto gastei este mês?',
-                  'Qual foi minha maior categoria de gastos?',
-                  'Quanto ainda tenho de saldo?',
-                  'Me dê um resumo do mês.',
-                ]).slice(0,4).map(suggestion => (
-                  <button
-                    type="button"
-                    key={suggestion}
-                    disabled={assistantBusy}
-                    onClick={() => {
-                      setAssistantQuestion(suggestion)
-                      void askZeusQuestion(suggestion)
-                    }}
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            <section className="panel insights-panel" aria-labelledby="zeus-insights-title">
-              <div className="panel__header insights-panel__header">
-                <div>
-                  <span className="panel__eyebrow">ANÁLISE AUTOMÁTICA</span>
-                  <h2 id="zeus-insights-title">ZEUS Insights</h2>
-                  <p>Leituras automáticas do seu comportamento financeiro em {monthLabel.toLowerCase()}.</p>
-                </div>
-                <span className="insights-badge">Beta</span>
-              </div>
-
-              {monthlySummary && (
-                <article className={`monthly-summary monthly-summary--${monthlySummary.tone}`}>
-                  <div className="monthly-summary__body">
-                    <span className="monthly-summary__label">RESUMO DO MÊS</span>
-                    <h3>{monthlySummary.title}</h3>
-                    <p>{monthlySummary.message}</p>
-                  </div>
-                  {monthlySummary.highlights.length > 0 && (
-                    <ul className="monthly-summary__highlights">
-                      {monthlySummary.highlights.map(highlight => <li key={highlight}>{highlight}</li>)}
-                    </ul>
-                  )}
-                </article>
-              )}
-
-              <div className="insights-grid">
-                {insights.map(insight => (
-                  <article className={`insight-card insight-card--${insight.tone}`} key={insight.id}>
-                    <span className="insight-card__signal" aria-hidden="true" />
-                    <div>
-                      <strong>{insight.title}</strong>
-                      <p>{insight.message}</p>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
+            <ZeusInsightsPanel
+              monthLabel={monthLabel}
+              summary={monthlySummary}
+              insights={insights}
+            />
 
             <section className="dashboard-grid">
               <article className="panel spending-panel">
@@ -1305,161 +1236,25 @@ export function App() {
             </section>
           </div>
         ) : view === 'recurring' ? (
-          <div className="recurring-page">
-            <section className="budget-summary-grid" aria-label="Resumo dos gastos recorrentes">
-              <MetricCard
-                label="Recorrências pendentes"
-                value={money(dashboard.recurringTotal)}
-                detail={dashboard.recurringExpenses.length ? `${dashboard.recurringExpenses.filter(item => !item.paid).length} de ${dashboard.recurringExpenses.length} compromisso${dashboard.recurringExpenses.length === 1 ? '' : 's'} ainda pendente${dashboard.recurringExpenses.filter(item => !item.paid).length === 1 ? '' : 's'} em ${monthLabel.toLowerCase()}` : 'Nenhum compromisso recorrente ativo no período'}
-                icon="budget"
-              />
-              <MetricCard
-                label="Gasto realizado"
-                value={money(dashboard.spent)}
-                detail="Somente lançamentos já registrados"
-                icon="wallet"
-              />
-              <MetricCard
-                label="Saldo projetado"
-                value={money(dashboard.projectedBalance)}
-                detail={dashboard.income > 0 ? `Renda menos gastos realizados e ${money(dashboard.recurringTotal)} recorrentes` : 'Cadastre receitas para completar a projeção'}
-                icon="income"
-                tone={dashboard.projectedBalance >= 0 ? 'accent' : 'warning'}
-              />
-            </section>
-
-            <div className="records-layout">
-              <section className="panel records-panel">
-                <div className="panel__header records-panel__header">
-                  <div>
-                    <span className="panel__eyebrow">COMPROMISSOS MENSAIS</span>
-                    <h2>Gastos recorrentes</h2>
-                  </div>
-                  <span className="records-count">{recurringExpenses.length} {recurringExpenses.length === 1 ? 'item' : 'itens'}</span>
-                </div>
-
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr><th>Descrição</th><th>Vencimento / vigência</th><th>Status no mês</th><th>Valor</th><th className="table-action">Ação</th></tr>
-                    </thead>
-                    <tbody>
-                      {recurringExpenses.map(entry => (
-                        <tr key={entry.id}>
-                          <td>
-                            <div className="record-name">
-                              <span className="record-icon record-icon--transactions"><Icon name="calendar" size={17} /></span>
-                              <div>
-                                <strong>{entry.name}</strong>
-                                <span>{entry.category} • {entry.active ? 'Ativo' : 'Inativo'}</span>
-                              </div>
-                            </div>
-                          </td>
-                          <td>
-                            <strong>Dia {entry.dueDay}</strong>
-                            <small className="income-date">
-                              {new Date(entry.activeFrom + 'T12:00:00').toLocaleDateString('pt-BR')} → {entry.activeUntil ? new Date(entry.activeUntil + 'T12:00:00').toLocaleDateString('pt-BR') : 'atual'}
-                            </small>
-                          </td>
-                          <td>
-                            {dashboard.recurringExpenses.find(item => item.id === entry.id)?.paid ? (
-                              <span className="debt-status debt-status--paid">Pago</span>
-                            ) : dashboard.recurringExpenses.some(item => item.id === entry.id) ? (
-                              <button className="secondary-button recurring-pay-button" disabled={busy} onClick={() => markRecurringExpensePaid(entry.id)}>
-                                Marcar como pago
-                              </button>
-                            ) : (
-                              <span className="debt-status">Fora da vigência</span>
-                            )}
-                          </td>
-                          <td><strong className="table-value">{money(entry.value)}</strong></td>
-                          <td className="table-action">
-                            <div className="table-actions">
-                              <button
-                                className="icon-action"
-                                disabled={busy}
-                                onClick={() => {
-                                  setEditingRecurring(entry)
-                                  setError('')
-                                  window.scrollTo({ top: 0, behavior: 'smooth' })
-                                }}
-                                aria-label={`Editar ${entry.name}`}
-                              >
-                                <Icon name="edit" size={17} />
-                              </button>
-                              <button className="icon-action icon-action--danger" disabled={busy} onClick={() => removeRecurringExpense(entry.id)} aria-label={`Excluir ${entry.name}`}>
-                                <Icon name="trash" size={17} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {!recurringExpenses.length && (
-                        <tr>
-                          <td colSpan={5} className="table-empty">
-                            <div className="empty-block__icon"><Icon name="calendar" size={22} /></div>
-                            <strong>Nenhum gasto recorrente cadastrado.</strong>
-                            <span>Cadastre aluguel, internet, academia, assinaturas e outros compromissos mensais.</span>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-
-              <aside className="panel record-form-panel">
-                <span className="panel__eyebrow">{editingRecurring ? 'EDITAR RECORRÊNCIA' : 'NOVA RECORRÊNCIA'}</span>
-                <h2>{editingRecurring ? 'Atualizar compromisso' : 'Adicionar compromisso mensal'}</h2>
-                <p>O valor entra como projeção mensal e não será marcado automaticamente como gasto já pago.</p>
-                <form key={`recurring-${editingRecurring?.id ?? 'new'}`} onSubmit={saveRecurringExpense}>
-                  <label>
-                    <span>Descrição</span>
-                    <input name="name" defaultValue={editingRecurring?.name ?? ''} placeholder="Ex.: Internet, aluguel, academia" required maxLength={120} />
-                  </label>
-                  <label>
-                    <span>Categoria</span>
-                    <select name="category" defaultValue={editingRecurring?.category ?? categories[0]}>
-                      {categories.map(category => <option key={category}>{category}</option>)}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Valor mensal</span>
-                    <div className="money-input">
-                      <span>R$</span>
-                      <input name="value" type="number" min="0.01" max="100000000" step="0.01" defaultValue={editingRecurring?.value} placeholder="0,00" required />
-                    </div>
-                  </label>
-                  <div className="form-grid-2">
-                    <label>
-                      <span>Dia de vencimento</span>
-                      <input name="dueDay" type="number" min="1" max="31" step="1" defaultValue={editingRecurring?.dueDay ?? 10} required />
-                    </label>
-                    <label>
-                      <span>Vigente a partir de</span>
-                      <input name="activeFrom" type="date" defaultValue={editingRecurring?.activeFrom ?? currentDateKey()} required />
-                    </label>
-                  </div>
-                  <label>
-                    <span>Vigente até (opcional)</span>
-                    <input name="activeUntil" type="date" defaultValue={editingRecurring?.activeUntil ?? ''} />
-                  </label>
-                  <label className="check-field">
-                    <input name="active" type="checkbox" defaultChecked={editingRecurring ? editingRecurring.active : true} />
-                    <span>Compromisso ativo</span>
-                  </label>
-                  <div className="form-actions">
-                    <button className="primary primary--full" disabled={busy}>
-                      {busy ? 'Salvando…' : editingRecurring ? 'Atualizar recorrência' : 'Salvar recorrência'}
-                      {!busy && <Icon name="arrow" size={17} />}
-                    </button>
-                    {editingRecurring && <button type="button" className="secondary-button" onClick={() => { setEditingRecurring(null); setError('') }}>Cancelar edição</button>}
-                  </div>
-                </form>
-                <div className="form-security"><Icon name="shield" size={17} /><span>Recorrências são isoladas por conta e usadas apenas nas projeções do ZEUS.</span></div>
-              </aside>
-            </div>
-          </div>
+          <RecurringExpensesPage
+            dashboard={dashboard}
+            recurringExpenses={recurringExpenses}
+            monthLabel={monthLabel}
+            busy={busy}
+            editing={editingRecurring}
+            onSubmit={saveRecurringExpense}
+            onEdit={entry => {
+              setEditingRecurring(entry)
+              setError('')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+            onRemove={id => { void removeRecurringExpense(id) }}
+            onMarkPaid={id => { void markRecurringExpensePaid(id) }}
+            onCancelEdit={() => {
+              setEditingRecurring(null)
+              setError('')
+            }}
+          />
         ) : view === 'budgets' ? (
           <div className="budget-page">
             <section className="budget-summary-grid">
