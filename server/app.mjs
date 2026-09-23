@@ -490,7 +490,7 @@ export class AuthService {
 
     const user = (await this.db.query('SELECT id,password FROM users WHERE id=?', [userId])).recordset[0];
     if (!user || !verifyPassword(data.currentPassword,user.password)) {
-      throw new HttpError(401, 'Senha atual incorreta.');
+      throw new HttpError(400, 'Senha atual incorreta.');
     }
 
     const nextPassword = createPasswordHash(data.newPassword);
