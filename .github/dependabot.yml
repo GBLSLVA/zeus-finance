@@ -7,7 +7,11 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "America/Sao_Paulo"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 8
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
     groups:
       production-minor-patch:
         dependency-type: "production"
@@ -29,7 +33,11 @@ updates:
       day: "monday"
       time: "09:15"
       timezone: "America/Sao_Paulo"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
     labels:
       - "dependencies"
       - "github-actions"
