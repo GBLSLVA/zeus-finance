@@ -534,12 +534,75 @@ export class FinanceRepository {
     const tonePriority = {warning:0, positive:1, info:2};
     items.sort((a,b) => tonePriority[a.tone] - tonePriority[b.tone]);
 
+    const spendingChange = previousSpent > 0
+      ? ((spent - previousSpent) / previousSpent) * 100
+      : null;
+    const warningCount = items.filter(item => item.tone === 'warning').length;
+    const highlights = [];
+
+    if (spendingChange !== null) {
+      const direction = spendingChange >= 0 ? 'acima' : 'abaixo';
+      highlights.push(`Gastos ${Math.abs(Math.round(spendingChange))}% ${direction} do mês anterior.`);
+    } else if (spent > 0) {
+      highlights.push('Este mês está formando sua primeira base de comparação.');
+    }
+
+    if (topCategory) {
+      const share = spent > 0 ? (topCategory.total / spent) * 100 : 0;
+      highlights.push(`${topCategory.category} concentra ${Math.round(share)}% dos gastos do mês.`);
+    }
+
+    if (warningCount > 0) {
+      highlights.push(`${warningCount} ponto${warningCount === 1 ? '' : 's'} de atenção detectado${warningCount === 1 ? '' : 's'} pelo ZEUS.`);
+    } else if (income > 0) {
+      highlights.push('Nenhum alerta crítico foi detectado nos dados atuais.');
+    }
+
+    let summary;
+    if (income === 0 && spent === 0) {
+      summary = {
+        tone:'info',
+        title:'Comece a construir seu panorama financeiro',
+        message:'Ainda não há movimentação suficiente neste mês. Cadastre receitas e gastos para receber um resumo automático.',
+        highlights:[],
+      };
+    } else if (income > 0 && balance < 0) {
+      summary = {
+        tone:'warning',
+        title:'O mês está com saldo negativo',
+        message:`As despesas superam a renda em ${moneyText(Math.abs(balance))}. Revise os maiores gastos e os alertas abaixo.`,
+        highlights:highlights.slice(0,3),
+      };
+    } else if (income > 0 && spent / income >= 0.8) {
+      summary = {
+        tone:'warning',
+        title:'A maior parte da renda já foi comprometida',
+        message:`Você utilizou ${Math.round((spent / income) * 100)}% da renda registrada e ainda tem ${moneyText(balance)} de saldo no período.`,
+        highlights:highlights.slice(0,3),
+      };
+    } else if (income > 0) {
+      summary = {
+        tone:'positive',
+        title:'O mês mantém saldo positivo',
+        message:`Entraram ${moneyText(income)}, saíram ${moneyText(spent)} e o saldo atual é ${moneyText(balance)}.`,
+        highlights:highlights.slice(0,3),
+      };
+    } else {
+      summary = {
+        tone:'info',
+        title:'Há gastos registrados sem renda no período',
+        message:`Foram registrados ${moneyText(spent)} em gastos. Cadastre as receitas do mês para o ZEUS calcular o saldo completo.`,
+        highlights:highlights.slice(0,3),
+      };
+    }
+
     return {
       month:monthKey,
       income,
       spent,
       balance,
       previousSpent,
+      summary,
       items:items.slice(0,8),
     };
   }
