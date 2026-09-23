@@ -40,7 +40,15 @@ const staticHeaders = (path) => ({
 });
 
 async function serve(req,res) {
-  const pathname = decodeURIComponent(new URL(req.url,'http://localhost').pathname);
+  let pathname;
+  try {
+    pathname = decodeURIComponent(new URL(req.url,'http://localhost').pathname);
+  } catch {
+    res.writeHead(400,{'Content-Type':'text/plain; charset=utf-8'});
+    res.end('Requisição inválida');
+    return;
+  }
+
   if (pathname.startsWith('/api/')) {
     await api.handle(req,res);
     return;
@@ -64,6 +72,12 @@ async function serve(req,res) {
     res.writeHead(200,staticHeaders(target));
     res.end(body);
   } catch {
+    if (extname(relative)) {
+      res.writeHead(404,{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'});
+      res.end('Arquivo não encontrado');
+      return;
+    }
+
     try {
       const index = resolve(dist,'index.html');
       const body = await readFile(index);
@@ -76,7 +90,17 @@ async function serve(req,res) {
   }
 }
 
-const server = createServer((req,res) => { void serve(req,res); });
+const server = createServer((req,res) => {
+  void serve(req,res).catch(error => {
+    console.error('Erro inesperado ao processar requisição:', error);
+    if (!res.headersSent) {
+      res.writeHead(500,{'Content-Type':'text/plain; charset=utf-8'});
+      res.end('Erro interno do servidor');
+      return;
+    }
+    res.destroy();
+  });
+});
 server.on('error',async error=>{console.error(error);await database.close();process.exitCode=1;});
 server.listen(port,host,()=>console.log(`ZEUS Finance produção: http://${host}:${port} (${database.kind})`));
 

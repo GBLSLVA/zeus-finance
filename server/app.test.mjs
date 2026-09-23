@@ -387,3 +387,66 @@ test('PostgreSQL: persiste cadastro e permite login após reconectar', {skip: !p
     await secondConnection.close();
   }
 });
+
+test('PostgreSQL: serializa pagamentos concorrentes sem ultrapassar o saldo', {skip: !process.env.TEST_DATABASE_URL}, async () => {
+  const database = new PostgresDatabase(process.env.TEST_DATABASE_URL);
+  await database.init();
+
+  const repository = new FinanceRepository(database);
+  const auth = new AuthService(repository);
+  const email = `postgres-debt-${Date.now()}@example.com`;
+  const password = 'secure-postgres-password-123';
+  let userId;
+
+  try {
+    const registered = await auth.login({email,password},true,'postgres-debt-register');
+    userId = registered.user.id;
+
+    const debt = await repository.addDebt(userId,{
+      name:'Concorrência cartão',
+      creditor:'Banco Teste',
+      originalAmount:1000,
+      interestRate:0,
+      installmentsTotal:10,
+      dueDay:10,
+    });
+
+    const results = await Promise.allSettled([
+      repository.addDebtPayment(userId,debt.id,{
+        amount:700,
+        paymentDate:'2026-09-20',
+        note:'Pagamento concorrente A',
+        countsAsInstallment:true,
+      }),
+      repository.addDebtPayment(userId,debt.id,{
+        amount:700,
+        paymentDate:'2026-09-20',
+        note:'Pagamento concorrente B',
+        countsAsInstallment:true,
+      }),
+    ]);
+
+    const fulfilled = results.filter(result => result.status === 'fulfilled');
+    const rejected = results.filter(result => result.status === 'rejected');
+    assert.equal(fulfilled.length,1);
+    assert.equal(rejected.length,1);
+    assert.equal(rejected[0].reason.status,400);
+
+    const payments = await repository.listDebtPayments(userId,debt.id);
+    assert.equal(payments.length,1);
+    assert.equal(payments[0].amount,700);
+
+    const updatedDebt = (await repository.listDebts(userId)).find(item => item.id === debt.id);
+    assert.equal(updatedDebt.currentBalance,300);
+    assert.equal(updatedDebt.paidAmount,700);
+    assert.equal(updatedDebt.installmentsPaid,1);
+  } finally {
+    if (userId) {
+      await database.query('DELETE FROM sessions WHERE user_id=?',[userId]);
+      await database.query('DELETE FROM debts WHERE user_id=?',[userId]);
+      await database.query('DELETE FROM users WHERE id=?',[userId]);
+    }
+    await database.close();
+  }
+});
+

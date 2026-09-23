@@ -351,6 +351,18 @@ export class SqliteDatabase {
     return {rowsAffected:[Number(result.changes)]};
   }
 
+  async transaction(work) {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const result = await work(this);
+      this.db.exec('COMMIT');
+      return result;
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
   async close() { this.db.close(); }
 }
 
@@ -409,6 +421,32 @@ export class PostgresDatabase {
       recordset: result.rows,
       rowsAffected: [Number(result.rowCount ?? 0)],
     };
+  }
+
+  async transaction(work) {
+    const client = await this.pool.connect();
+    const database = {
+      kind: 'postgres',
+      query: async (statement, values = []) => {
+        const result = await client.query(translatePostgresSql(statement), values);
+        return {
+          recordset: result.rows,
+          rowsAffected: [Number(result.rowCount ?? 0)],
+        };
+      },
+    };
+
+    try {
+      await client.query('BEGIN');
+      const result = await work(database);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async close() {
