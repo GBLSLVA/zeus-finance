@@ -16,6 +16,7 @@ Funcionalidades principais:
 - Dashboard com receita mensal, salário, extras, gastos, saldo estimado, dívida total e metas.
 - Dívidas estruturadas com credor, valor original, saldo atual, juros, parcelas, vencimento e status.
 - Pagamentos parciais de dívidas com histórico, baixa automática do saldo e atualização das parcelas pagas.
+- Pagamentos e edições de dívidas protegidos por transações de banco para evitar inconsistências em operações simultâneas.
 - Distribuição de gastos por categoria.
 - Orçamento mensal por categoria, com limite, gasto, restante e percentual utilizado.
 - Navegação entre meses no dashboard e na área de orçamentos.
@@ -66,7 +67,8 @@ Migrações atuais:
 2. datas financeiras e auditoria básica em lançamentos;
 3. recorrência, vigência e status de receitas;
 4. dívidas estruturadas e histórico de pagamentos, com migração automática das dívidas antigas;
-5. orçamentos mensais por categoria.
+5. orçamentos mensais por categoria;
+6. proteção para impedir valor reservado de meta acima do valor alvo.
 
 Bases criadas por versões anteriores são atualizadas automaticamente ao iniciar o servidor.
 
