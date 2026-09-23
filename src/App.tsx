@@ -5,6 +5,8 @@ import { MetricCard } from './components/MetricCard'
 import { ZeusAssistantPanel } from './features/assistant/ZeusAssistantPanel'
 import { ZeusInsightsPanel } from './features/insights/ZeusInsightsPanel'
 import { RecurringExpensesPage } from './features/recurring/RecurringExpensesPage'
+import { BudgetPage } from './features/budgets/BudgetPage'
+import { DebtPage } from './features/debts/DebtPage'
 import {
   categories,
   categoryColor,
@@ -1256,210 +1258,34 @@ export function App() {
             }}
           />
         ) : view === 'budgets' ? (
-          <div className="budget-page">
-            <section className="budget-summary-grid">
-              <MetricCard
-                label="Orçamento definido"
-                value={money(dashboard.budgetTotal)}
-                detail={dashboard.budgetTotal > 0 ? `${budgets.length} categoria${budgets.length === 1 ? '' : 's'} com limite` : 'Nenhum limite definido neste mês'}
-                icon="budget"
-              />
-              <MetricCard
-                label="Consumido"
-                value={money(dashboard.budgetedSpent)}
-                detail={dashboard.budgetTotal > 0 ? `${percent(dashboard.budgetUsage)} dos limites definidos` : 'Defina limites para acompanhar o uso'}
-                icon="wallet"
-                tone={dashboard.budgetUsage > 100 ? 'warning' : 'default'}
-              />
-              <MetricCard
-                label="Disponível"
-                value={money(dashboard.budgetRemaining)}
-                detail={dashboard.budgetRemaining < 0 ? `Orçamento excedido em ${money(Math.abs(dashboard.budgetRemaining))}` : 'Quanto ainda resta nas categorias orçadas'}
-                icon="income"
-                tone={dashboard.budgetRemaining < 0 ? 'warning' : 'accent'}
-              />
-            </section>
-
-            <section className="budget-category-grid">
-              {dashboard.budgetData.map(item => (
-                <article className={`panel budget-category-card ${item.remaining < 0 ? 'budget-category-card--over' : ''}`} key={item.category}>
-                  <div className="budget-category-card__header">
-                    <div>
-                      <span className="category-dot" style={{ background: categoryColor[item.category] }} />
-                      <div>
-                        <strong>{item.category}</strong>
-                        <span>{item.budget ? 'Limite configurado' : 'Sem limite para este mês'}</span>
-                      </div>
-                    </div>
-                    {item.budget && <button className="icon-action icon-action--danger" onClick={() => removeBudget(item.budget!.id)} aria-label={`Remover orçamento de ${item.category}`}><Icon name="trash" size={16} /></button>}
-                  </div>
-
-                  <div className="budget-category-card__numbers">
-                    <div><span>Gasto</span><strong>{money(item.spent)}</strong></div>
-                    <div><span>Limite</span><strong>{item.limit > 0 ? money(item.limit) : '—'}</strong></div>
-                    <div><span>Restante</span><strong className={item.remaining < 0 ? 'negative-value' : ''}>{item.limit > 0 ? money(item.remaining) : '—'}</strong></div>
-                  </div>
-
-                  <div className="progress-track budget-category-progress">
-                    <span style={{ width: item.limit > 0 ? progressPercent(item.usage) : '0%' }} />
-                  </div>
-                  <div className="budget-category-card__usage">
-                    <span>{item.limit > 0 ? `${percent(item.usage)} utilizado` : 'Defina um limite abaixo'}</span>
-                    {item.remaining < 0 && <strong>Excedido</strong>}
-                  </div>
-
-                  <form className="budget-inline-form" onSubmit={event => saveBudget(event, item.category)}>
-                    <label>
-                      <span>Limite para {monthLabel.toLowerCase()}</span>
-                      <div className="money-input">
-                        <span>R$</span>
-                        <input name="limit" type="number" min="0.01" max="100000000" step="0.01" defaultValue={item.limit || undefined} placeholder="0,00" required />
-                      </div>
-                    </label>
-                    <button className="primary" disabled={busy}>{item.budget ? 'Atualizar' : 'Definir limite'}</button>
-                  </form>
-                </article>
-              ))}
-            </section>
-          </div>
+          <BudgetPage
+            dashboard={dashboard}
+            budgets={budgets}
+            monthLabel={monthLabel}
+            busy={busy}
+            onSave={saveBudget}
+            onRemove={id => { void removeBudget(id) }}
+          />
         ) : view === 'debts' ? (
-          <div className="debt-page">
-            <section className="debt-summary-grid" aria-label="Resumo das dívidas">
-              <article className="metric-card metric-card--warning">
-                <div className="metric-card__top"><span className="metric-card__label">Saldo devedor atual</span><span className="metric-card__icon"><Icon name="debt" size={18} /></span></div>
-                <strong>{money(dashboard.debt)}</strong>
-                <span className="metric-card__detail">{(data.debts as Debt[]).filter(debt => debt.status === 'active').length} dívida(s) ativa(s)</span>
-              </article>
-              <article className="metric-card">
-                <div className="metric-card__top"><span className="metric-card__label">Valor original</span><span className="metric-card__icon"><Icon name="debt" size={18} /></span></div>
-                <strong>{money(dashboard.debtOriginal)}</strong>
-                <span className="metric-card__detail">Soma dos valores originais cadastrados</span>
-              </article>
-              <article className="metric-card metric-card--accent">
-                <div className="metric-card__top"><span className="metric-card__label">Total já pago</span><span className="metric-card__icon"><Icon name="income" size={18} /></span></div>
-                <strong>{money(dashboard.debtPaid)}</strong>
-                <span className="metric-card__detail">{percent(dashboard.debtProgress)} das dívidas já foi quitado</span>
-              </article>
-            </section>
-
-            <div className="records-layout debt-records-layout">
-              <section className="panel records-panel debt-records-panel">
-                <div className="panel__header records-panel__header">
-                  <div>
-                    <span className="panel__eyebrow">COMPROMISSOS</span>
-                    <h2>Dívidas cadastradas</h2>
-                  </div>
-                  <span className="records-count">{data.debts.length} {data.debts.length === 1 ? 'item' : 'itens'}</span>
-                </div>
-
-                <div className="debt-card-list">
-                  {(data.debts as Debt[]).map(debt => {
-                    const progress = debt.originalAmount > 0 ? (debt.paidAmount / debt.originalAmount) * 100 : 0
-                    return (
-                      <article className={`debt-card ${debt.status === 'paid' ? 'debt-card--paid' : ''}`} key={debt.id}>
-                        <div className="debt-card__header">
-                          <div className="record-name">
-                            <span className="record-icon record-icon--debts"><Icon name="debt" size={17} /></span>
-                            <div>
-                              <strong>{debt.name}</strong>
-                              <span>{debt.creditor || 'Credor não informado'}{debt.dueDay ? ` • vence dia ${debt.dueDay}` : ''}</span>
-                            </div>
-                          </div>
-                          <span className={`debt-status debt-status--${debt.status}`}>{debt.status === 'paid' ? 'Quitada' : 'Ativa'}</span>
-                        </div>
-
-                        <div className="debt-card__values">
-                          <div><span>Original</span><strong>{money(debt.originalAmount)}</strong></div>
-                          <div><span>Já pago</span><strong>{money(debt.paidAmount)}</strong></div>
-                          <div><span>Saldo atual</span><strong>{money(debt.currentBalance)}</strong></div>
-                        </div>
-
-                        <div className="progress-track debt-progress"><span style={{ width: progressPercent(progress) }} /></div>
-
-                        <div className="debt-card__meta">
-                          <span>{percent(progress)} quitado</span>
-                          <span>{debt.installmentsTotal > 0 ? `${debt.installmentsPaid}/${debt.installmentsTotal} parcelas` : 'Sem parcelamento informado'}</span>
-                          <span>{debt.interestRate > 0 ? `Juros: ${debt.interestRate.toLocaleString('pt-BR')}% a.m.` : 'Juros não informados'}</span>
-                        </div>
-
-                        <div className="debt-card__actions">
-                          <button className="secondary-button" onClick={() => openDebtPayments(debt.id)}>Pagamentos</button>
-                          <button className="icon-action" onClick={() => startEdit('debts', debt)} aria-label={`Editar ${debt.name}`}><Icon name="edit" size={17} /></button>
-                          <button className="icon-action icon-action--danger" onClick={() => remove('debts', debt.id)} aria-label={`Excluir ${debt.name}`}><Icon name="trash" size={17} /></button>
-                        </div>
-                      </article>
-                    )
-                  })}
-                  {!data.debts.length && (
-                    <div className="table-empty debt-empty">
-                      <div className="empty-block__icon"><Icon name="debt" size={22} /></div>
-                      <strong>Nenhuma dívida cadastrada.</strong>
-                      <span>Use o formulário ao lado para registrar seu primeiro compromisso.</span>
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              <aside className="panel record-form-panel">
-                <span className="panel__eyebrow">{editing?.kind === 'debts' ? 'EDITAR DÍVIDA' : 'NOVA DÍVIDA'}</span>
-                <h2>{editing?.kind === 'debts' ? 'Atualizar dívida' : 'Adicionar dívida'}</h2>
-                <p>Informe o valor original. O saldo atual será calculado automaticamente a partir dos pagamentos registrados.</p>
-                <form key={`debt-${editing?.kind === 'debts' ? editing.entry.id : 'new'}`} onSubmit={save}>
-                  <label><span>Descrição</span><input name="name" defaultValue={editing?.kind === 'debts' ? editing.entry.name : ''} placeholder="Ex.: Cartão, empréstimo, financiamento" required maxLength={120} /></label>
-                  <label><span>Credor</span><input name="creditor" defaultValue={editing?.kind === 'debts' ? (editing.entry as Debt).creditor : ''} placeholder="Ex.: Banco, loja, pessoa" maxLength={120} /></label>
-                  <label><span>Valor original</span><div className="money-input"><span>R$</span><input name="originalAmount" type="number" min="0.01" max="100000000" step="0.01" defaultValue={editing?.kind === 'debts' ? (editing.entry as Debt).originalAmount : undefined} placeholder="0,00" required /></div></label>
-                  <div className="form-grid-2">
-                    <label><span>Juros ao mês (%)</span><input name="interestRate" type="number" min="0" max="100" step="0.01" defaultValue={editing?.kind === 'debts' ? (editing.entry as Debt).interestRate : 0} /></label>
-                    <label><span>Dia de vencimento</span><input name="dueDay" type="number" min="1" max="31" defaultValue={editing?.kind === 'debts' ? (editing.entry as Debt).dueDay ?? undefined : undefined} placeholder="10" /></label>
-                  </div>
-                  <label><span>Total de parcelas</span><input name="installmentsTotal" type="number" min="0" max="600" step="1" defaultValue={editing?.kind === 'debts' ? (editing.entry as Debt).installmentsTotal : 0} /></label>
-                  <div className="form-actions">
-                    <button className="primary primary--full" disabled={busy}>{busy ? 'Salvando…' : editing?.kind === 'debts' ? 'Atualizar dívida' : 'Salvar dívida'}{!busy && <Icon name="arrow" size={17} />}</button>
-                    {editing?.kind === 'debts' && <button type="button" className="secondary-button" onClick={cancelEdit}>Cancelar edição</button>}
-                  </div>
-                </form>
-              </aside>
-            </div>
-
-            {selectedDebtId && (() => {
-              const debt = (data.debts as Debt[]).find(item => item.id === selectedDebtId)
-              if (!debt) return null
-              return (
-                <section className="panel payments-panel">
-                  <div className="panel__header">
-                    <div>
-                      <span className="panel__eyebrow">HISTÓRICO DE PAGAMENTOS</span>
-                      <h2>{debt.name}</h2>
-                    </div>
-                    <button className="link-button" onClick={() => { setSelectedDebtId(null); setDebtPayments([]) }}>Fechar</button>
-                  </div>
-
-                  <div className="payments-layout">
-                    <form className="payment-form" onSubmit={addDebtPayment}>
-                      <label><span>Valor pago</span><div className="money-input"><span>R$</span><input name="amount" type="number" min="0.01" max={debt.currentBalance} step="0.01" placeholder="0,00" required /></div></label>
-                      <label><span>Data do pagamento</span><input name="paymentDate" type="date" defaultValue={currentDateKey()} required /></label>
-                      <label><span>Observação</span><input name="note" placeholder="Ex.: Parcela de setembro" maxLength={240} /></label>
-                      <label className="check-field"><input name="countsAsInstallment" type="checkbox" defaultChecked /><span>Contar como parcela paga</span></label>
-                      <button className="primary primary--full" disabled={busy || debt.currentBalance <= 0}>{debt.currentBalance <= 0 ? 'Dívida quitada' : busy ? 'Salvando…' : 'Registrar pagamento'}</button>
-                    </form>
-
-                    <div className="payment-history">
-                      {debtPayments.map(payment => (
-                        <div className="payment-row" key={payment.id}>
-                          <div>
-                            <strong>{money(payment.amount)}</strong>
-                            <span>{new Date(payment.paymentDate + 'T12:00:00').toLocaleDateString('pt-BR')}{payment.note ? ` • ${payment.note}` : ''}</span>
-                          </div>
-                          <button className="icon-action icon-action--danger" onClick={() => removeDebtPayment(payment.id)} aria-label="Excluir pagamento"><Icon name="trash" size={16} /></button>
-                        </div>
-                      ))}
-                      {!debtPayments.length && <div className="mini-empty"><span>Nenhum pagamento registrado para esta dívida.</span></div>}
-                    </div>
-                  </div>
-                </section>
-              )
-            })()}
-          </div>
+          <DebtPage
+            dashboard={dashboard}
+            debts={data.debts as Debt[]}
+            debtPayments={debtPayments}
+            editing={editing}
+            selectedDebtId={selectedDebtId}
+            busy={busy}
+            onSave={save}
+            onEdit={debt => startEdit('debts', debt)}
+            onRemove={id => { void remove('debts', id) }}
+            onCancelEdit={cancelEdit}
+            onOpenPayments={id => { void openDebtPayments(id) }}
+            onClosePayments={() => {
+              setSelectedDebtId(null)
+              setDebtPayments([])
+            }}
+            onAddPayment={addDebtPayment}
+            onRemovePayment={id => { void removeDebtPayment(id) }}
+          />
         ) : view === 'incomes' ? (
           <div className="records-layout">
             <section className="panel records-panel">
