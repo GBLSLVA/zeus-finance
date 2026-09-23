@@ -8,6 +8,7 @@ import { SqliteDatabase, PostgresDatabase } from './database.mjs';
 import { BudgetRepository } from './repositories/budget-repository.mjs';
 import { DebtRepository } from './repositories/debt-repository.mjs';
 import { EntryRepository } from './repositories/entry-repository.mjs';
+import { GoalRepository } from './repositories/goal-repository.mjs';
 import { IncomeRepository } from './repositories/income-repository.mjs';
 import { RecurringExpenseRepository } from './repositories/recurring-expense-repository.mjs';
 import { UserRepository } from './repositories/user-repository.mjs';
@@ -32,6 +33,7 @@ test('Arquitetura: FinanceRepository compõe UserRepository e AuthService depend
     const finance = new FinanceRepository(db);
     assert.ok(finance.users instanceof UserRepository);
     assert.ok(finance.entries instanceof EntryRepository);
+    assert.ok(finance.goals instanceof GoalRepository);
     assert.ok(finance.debts instanceof DebtRepository);
     assert.ok(finance.budgets instanceof BudgetRepository);
     assert.ok(finance.recurring instanceof RecurringExpenseRepository);
@@ -82,6 +84,7 @@ test('Arquitetura: repositories de domínio mantêm validação e persistência 
     const users = new UserRepository(db);
     const account = await users.create('repositories@example.com','hash');
     const entries = new EntryRepository(db);
+    const goals = new GoalRepository(db);
     const debts = new DebtRepository(db);
     const budgets = new BudgetRepository(db);
     const recurring = new RecurringExpenseRepository(db);
@@ -94,6 +97,22 @@ test('Arquitetura: repositories de domínio mantêm validação e persistência 
       transactionDate:'2026-09-05',
     });
     assert.equal(transaction.value,80);
+
+    const goal = await goals.add(account.id,{
+      name:'Reserva',
+      target:1000,
+      saved:100,
+    });
+    assert.equal(goal.saved,100);
+
+    const movement = await goals.addMovement(account.id,goal.id,{
+      type:'deposit',
+      amount:150,
+      movementDate:'2026-09-06',
+      note:'Aporte teste',
+    });
+    assert.equal(movement.goal.saved,250);
+    assert.equal((await goals.listMovements(account.id,goal.id)).length,2);
 
     const debt = await debts.add(account.id,{
       name:'Cartão',

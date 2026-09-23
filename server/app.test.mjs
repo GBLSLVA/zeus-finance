@@ -93,7 +93,63 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal((await call('transactions','POST',{name:'Data ruim',category:'Comida',value:10,transactionDate:'2026-02-31'},first.cookie)).status,400);
     assert.equal((await call('goals','POST',{name:'Meta inválida',target:100,saved:101},first.cookie)).status,400);
 
-    assert.equal((await call('goals','POST',{name:'Reserva',target:1000,saved:100},first.cookie)).status,201);
+    const goal = await call('goals','POST',{name:'Reserva',target:1000,saved:100},first.cookie);
+    assert.equal(goal.status,201);
+    assert.equal(goal.data.saved,100);
+
+    const initialGoalMovements = await call(`goals/${goal.data.id}/movements`,'GET',undefined,first.cookie);
+    assert.equal(initialGoalMovements.status,200);
+    assert.equal(initialGoalMovements.data.length,1);
+    assert.equal(initialGoalMovements.data[0].type,'initial');
+    assert.equal(initialGoalMovements.data[0].amount,100);
+
+    const goalDeposit = await call(`goals/${goal.data.id}/movements`,'POST',{
+      type:'deposit',
+      amount:250,
+      movementDate:'2026-09-04',
+      note:'Aporte do mês',
+    },first.cookie);
+    assert.equal(goalDeposit.status,201);
+    assert.equal(goalDeposit.data.goal.saved,350);
+
+    const goalWithdrawal = await call(`goals/${goal.data.id}/movements`,'POST',{
+      type:'withdrawal',
+      amount:50,
+      movementDate:'2026-09-05',
+      note:'Ajuste',
+    },first.cookie);
+    assert.equal(goalWithdrawal.status,201);
+    assert.equal(goalWithdrawal.data.goal.saved,300);
+
+    assert.equal((await call(`goals/${goal.data.id}/movements`,'POST',{
+      type:'withdrawal',
+      amount:500,
+      movementDate:'2026-09-06',
+    },first.cookie)).status,400);
+
+    assert.equal((await call(`goals/${goal.data.id}/movements`,'POST',{
+      type:'deposit',
+      amount:800,
+      movementDate:'2026-09-06',
+    },first.cookie)).status,400);
+
+    const goalAfterWithdrawalRemoval = await call(
+      `goals/${goal.data.id}/movements/${goalWithdrawal.data.movement.id}`,
+      'DELETE',
+      undefined,
+      first.cookie,
+    );
+    assert.equal(goalAfterWithdrawalRemoval.status,200);
+    assert.equal(goalAfterWithdrawalRemoval.data.saved,350);
+
+    const goalAfterDepositRemoval = await call(
+      `goals/${goal.data.id}/movements/${goalDeposit.data.movement.id}`,
+      'DELETE',
+      undefined,
+      first.cookie,
+    );
+    assert.equal(goalAfterDepositRemoval.status,200);
+    assert.equal(goalAfterDepositRemoval.data.saved,100);
 
     const debt = await call('debts','POST',{
       name:'Cartão',
@@ -343,6 +399,7 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     const second = await call('register','POST',{email:'b@example.com',password:'secure-password-456'});
     assert.deepEqual((await call('transactions','GET',undefined,second.cookie)).data,[]);
     assert.deepEqual((await call('recurring-expenses','GET',undefined,second.cookie)).data,[]);
+    assert.equal((await call(`goals/${goal.data.id}/movements`,'GET',undefined,second.cookie)).status,404);
 
     const secondEntry = await call('transactions','POST',{
       name:'Registro exclusivo do segundo usuário',
@@ -388,12 +445,15 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     const firstExport = await call('export','GET',undefined,first.cookie);
     assert.equal(firstExport.status,200);
     assert.equal(firstExport.data.format,'zeus-finance-backup');
-    assert.equal(firstExport.data.version,1);
+    assert.equal(firstExport.data.version,2);
     assert.equal(firstExport.data.account.email,'a@example.com');
     assert.match(firstExport.data.exportedAt,/^\d{4}-\d{2}-\d{2}T/);
     assert.equal(firstExport.data.transactions.length,1);
     assert.equal(firstExport.data.transactions[0].name,'Mercado atualizado');
     assert.equal(firstExport.data.goals.length,1);
+    assert.equal(firstExport.data.goalMovements.length,1);
+    assert.equal(firstExport.data.goalMovements[0].type,'initial');
+    assert.equal(firstExport.data.goalMovements[0].amount,100);
     assert.equal(firstExport.data.incomes.length,3);
     assert.equal(firstExport.data.debts.length,1);
     assert.equal(firstExport.data.debtPayments.length,1);
@@ -407,6 +467,7 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal(secondExport.data.account.email,'b@example.com');
     assert.equal(secondExport.data.transactions.length,1);
     assert.equal(secondExport.data.transactions[0].name,'Registro exclusivo do segundo usuário');
+    assert.equal(secondExport.data.goalMovements.length,0);
     assert.equal(secondExport.data.recurringExpenses.length,0);
     assert.equal(JSON.stringify(secondExport.data).includes('Mercado atualizado'),false);
 
@@ -751,7 +812,7 @@ test('Conta: exclusão remove dados próprios e preserva outro usuário', async 
       confirmation:'EXCLUIR',
     });
 
-    for (const table of ['sessions','entries','incomes','debts','debt_payments','budgets','recurring_expenses']) {
+    for (const table of ['sessions','entries','goal_movements','incomes','debts','debt_payments','budgets','recurring_expenses']) {
       const count = (await db.query(`SELECT COUNT(*) AS total FROM ${table} WHERE user_id=?`,[owner.user.id])).recordset[0].total;
       assert.equal(count,0,`${table} ainda possui dados do usuário excluído`);
     }
@@ -784,6 +845,7 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
     INSERT INTO users(id,email,password) VALUES(1,'legacy@example.com','hash');
     INSERT INTO entries(id,user_id,kind,name,category,amount,saved,created_at) VALUES(1,1,'transactions','Mercado','Comida',1234,0,'2026-08-15 10:00:00');
     INSERT INTO entries(id,user_id,kind,name,category,amount,saved,created_at) VALUES(2,1,'debts','Cartão antigo',NULL,250000,0,'2026-07-10 10:00:00');
+    INSERT INTO entries(id,user_id,kind,name,category,amount,saved,created_at) VALUES(3,1,'goals','Reserva antiga',NULL,100000,25000,'2026-06-10 10:00:00');
     INSERT INTO incomes(id,user_id,name,type,amount,received_at) VALUES(1,1,'Salário antigo','salary',300000,'2026-01-05 12:00:00');
   `);
   legacy.close();
@@ -791,7 +853,7 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
   const migrated = new SqliteDatabase(path);
   try {
     const versions = migrated.db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(row => row.version);
-    assert.deepEqual(versions,[1,2,3,4,5,6,7]);
+    assert.deepEqual(versions,[1,2,3,4,5,6,7,8]);
 
     const entryColumns = migrated.db.prepare('PRAGMA table_info(entries)').all().map(row => row.name);
     assert.ok(entryColumns.includes('transaction_date'));
@@ -830,6 +892,15 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
     const recurringEntryColumns = migrated.db.prepare('PRAGMA table_info(entries)').all().map(row => row.name);
     assert.ok(recurringEntryColumns.includes('recurring_expense_id'));
     assert.ok(recurringEntryColumns.includes('recurring_month'));
+
+    const goalMovementColumns = migrated.db.prepare('PRAGMA table_info(goal_movements)').all().map(row => row.name);
+    assert.ok(goalMovementColumns.includes('goal_id'));
+    assert.ok(goalMovementColumns.includes('movement_date'));
+
+    const migratedGoalMovement = migrated.db.prepare('SELECT * FROM goal_movements WHERE goal_id=3').get();
+    assert.equal(migratedGoalMovement.type,'initial');
+    assert.equal(migratedGoalMovement.amount,25000);
+    assert.equal(migratedGoalMovement.movement_date,'2026-06-10');
   } finally {
     await migrated.close();
     rmSync(dir,{recursive:true,force:true});
@@ -896,7 +967,7 @@ test('PostgreSQL: persiste cadastro e permite login após reconectar', {skip: !p
   await firstConnection.init();
   try {
     const versions = (await firstConnection.query('SELECT version FROM schema_migrations ORDER BY version')).recordset.map(row => row.version);
-    assert.deepEqual(versions,[1,2,3,4,5,6,7]);
+    assert.deepEqual(versions,[1,2,3,4,5,6,7,8]);
 
     const auth = new AuthService(new FinanceRepository(firstConnection));
     const registered = await auth.login({email,password},true,'postgres-register');
@@ -984,6 +1055,63 @@ test('PostgreSQL: serializa pagamentos concorrentes sem ultrapassar o saldo', {s
     if (userId) {
       await database.query('DELETE FROM sessions WHERE user_id=?',[userId]);
       await database.query('DELETE FROM debts WHERE user_id=?',[userId]);
+      await database.query('DELETE FROM users WHERE id=?',[userId]);
+    }
+    await database.close();
+  }
+});
+
+test('PostgreSQL: serializa aportes concorrentes sem ultrapassar a meta', {skip: !process.env.TEST_DATABASE_URL}, async () => {
+  const database = new PostgresDatabase(process.env.TEST_DATABASE_URL);
+  await database.init();
+
+  const repository = new FinanceRepository(database);
+  const auth = new AuthService(repository);
+  const email = `postgres-goal-${Date.now()}@example.com`;
+  const password = 'secure-postgres-password-123';
+  let userId;
+
+  try {
+    const registered = await auth.login({email,password},true,'postgres-goal-register');
+    userId = registered.user.id;
+
+    const goal = await repository.add(userId,'goals',{
+      name:'Meta concorrente',
+      target:1000,
+      saved:0,
+    });
+
+    const results = await Promise.allSettled([
+      repository.addGoalMovement(userId,goal.id,{
+        type:'deposit',
+        amount:700,
+        movementDate:'2026-09-20',
+        note:'Aporte concorrente A',
+      }),
+      repository.addGoalMovement(userId,goal.id,{
+        type:'deposit',
+        amount:700,
+        movementDate:'2026-09-20',
+        note:'Aporte concorrente B',
+      }),
+    ]);
+
+    const fulfilled = results.filter(result => result.status === 'fulfilled');
+    const rejected = results.filter(result => result.status === 'rejected');
+    assert.equal(fulfilled.length,1);
+    assert.equal(rejected.length,1);
+    assert.equal(rejected[0].reason.status,400);
+
+    const movements = await repository.listGoalMovements(userId,goal.id);
+    assert.equal(movements.length,1);
+    assert.equal(movements[0].amount,700);
+
+    const updatedGoal = (await repository.list(userId,'goals')).find(item => item.id === goal.id);
+    assert.equal(updatedGoal.saved,700);
+  } finally {
+    if (userId) {
+      await database.query('DELETE FROM sessions WHERE user_id=?',[userId]);
+      await database.query("DELETE FROM entries WHERE user_id=? AND kind='goals'",[userId]);
       await database.query('DELETE FROM users WHERE id=?',[userId]);
     }
     await database.close();

@@ -12,8 +12,9 @@ Funcionalidades principais:
 - Sessão padrão de 24 horas, com opção explícita de manter o dispositivo conectado por 30 dias.
 - Troca de senha exigindo a senha atual, com encerramento automático das outras sessões.
 - Exclusão segura da conta, com confirmação por senha e remoção transacional dos dados do usuário.
-- Exportação completa dos dados da conta em backup JSON isolado por usuário.
+- Exportação completa dos dados da conta em backup JSON v2 isolado por usuário, incluindo movimentações de metas.
 - Cadastro, edição, listagem e exclusão de gastos, dívidas, metas e receitas.
+- Metas com histórico de aportes, retiradas, saldo inicial e correção de movimentações.
 - Salários recorrentes com período de vigência e status ativo/inativo.
 - Gastos recorrentes com categoria, valor mensal, dia de vencimento, vigência e status ativo/inativo.
 - Registro de pagamento mensal da recorrência, convertendo o compromisso pendente em gasto real sem dupla contagem.
@@ -81,7 +82,8 @@ Migrações atuais:
 4. dívidas estruturadas e histórico de pagamentos, com migração automática das dívidas antigas;
 5. orçamentos mensais por categoria;
 6. proteção para impedir valor reservado de meta acima do valor alvo;
-7. gastos recorrentes com vigência e vencimento mensal.
+7. gastos recorrentes com vigência e vencimento mensal;
+8. histórico transacional de movimentações de metas, com migração automática do saldo reservado existente.
 
 Bases criadas por versões anteriores são atualizadas automaticamente ao iniciar o servidor.
 
@@ -177,7 +179,8 @@ Responsabilidades:
 - **FinanceApi:** roteamento, validação de origem e respostas HTTP.
 - **FinanceRepository:** fachada compatível da camada financeira; delega persistência aos repositories e cálculos/orquestração aos services.
 - **UserRepository:** persistência de usuários, credenciais e sessões.
-- **EntryRepository:** persistência e validação de gastos e metas.
+- **EntryRepository:** persistência e validação de gastos.
+- **GoalRepository:** metas, aportes, retiradas, histórico e concorrência transacional.
 - **DebtRepository:** dívidas, pagamentos, recálculo de saldo e concorrência transacional.
 - **IncomeRepository:** persistência e validação de receitas recorrentes e extras.
 - **BudgetRepository:** persistência e validação de orçamentos mensais por categoria.
@@ -193,7 +196,7 @@ Responsabilidades:
 - **src/utils/finance.ts:** formatação e utilitários de datas/percentuais.
 - **server/domain/finance-values.mjs:** validações e normalizadores compartilhados do domínio financeiro.
 - **src/components:** componentes visuais reutilizáveis do React.
-- **src/features:** módulos de interface por funcionalidade; Visão Geral, Assistente, Insights, Recorrências, Orçamentos e Dívidas já foram extraídos do App principal.
+- **src/features:** módulos de interface por funcionalidade; Visão Geral, Assistente, Insights, Recorrências, Orçamentos, Dívidas, Metas e Gastos já foram extraídos do App principal.
 
 O projeto usa POO principalmente no backend/domínio e composição funcional no React. Herança é usada apenas onde existe relação de subtipo clara; composição e injeção de dependências são preferidas para evitar acoplamento.
 
@@ -231,7 +234,6 @@ Prioridades seguintes:
 - tendências por categoria e detecção de anomalias;
 - resumo financeiro semanal e mensal;
 - ampliar o assistente conversacional com histórico de perguntas e linguagem natural mais flexível;
-- movimentações de metas;
 - categorias personalizadas;
 - exportação CSV/PDF;
 - restauração de backup JSON;

@@ -38,6 +38,16 @@ export type DebtPayment = {
   createdAt: string
 }
 
+export type GoalMovement = {
+  id: number
+  goalId: number
+  type: 'initial' | 'deposit' | 'withdrawal'
+  amount: number
+  movementDate: string
+  note: string
+  createdAt: string
+}
+
 export type Budget = {
   id: number
   month: string
