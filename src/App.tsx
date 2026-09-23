@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { api } from './api'
 
 type Kind = 'transactions' | 'debts' | 'goals'
@@ -77,6 +77,74 @@ type InsightsResponse = {
   previousSpent: number
   items: Insight[]
 }
+
+type Dashboard = {
+  month: string
+  monthly: Entry[]
+  spent: number
+  activeSalaries: Income[]
+  salary: number
+  monthlyExtras: Income[]
+  extras: number
+  income: number
+  balance: number
+  debt: number
+  debtOriginal: number
+  debtPaid: number
+  debtProgress: number
+  debtMonths: number
+  saved: number
+  targets: number
+  goalProgress: number
+  categoriesData: Array<{ category: Category; total: number; share: number }>
+  budgetData: Array<{
+    category: Category
+    budget: Budget | null
+    limit: number
+    spent: number
+    remaining: number
+    usage: number
+  }>
+  budgetTotal: number
+  budgetedSpent: number
+  budgetRemaining: number
+  budgetUsage: number
+  historyData: Array<{ monthKey: string; income: number; expenses: number; balance: number }>
+}
+
+const emptyDashboard = (month: string): Dashboard => ({
+  month,
+  monthly: [],
+  spent: 0,
+  activeSalaries: [],
+  salary: 0,
+  monthlyExtras: [],
+  extras: 0,
+  income: 0,
+  balance: 0,
+  debt: 0,
+  debtOriginal: 0,
+  debtPaid: 0,
+  debtProgress: 0,
+  debtMonths: 0,
+  saved: 0,
+  targets: 0,
+  goalProgress: 0,
+  categoriesData: [],
+  budgetData: categories.map(category => ({
+    category,
+    budget: null,
+    limit: 0,
+    spent: 0,
+    remaining: 0,
+    usage: 0,
+  })),
+  budgetTotal: 0,
+  budgetedSpent: 0,
+  budgetRemaining: 0,
+  budgetUsage: 0,
+  historyData: [],
+})
 
 const titles: Record<View, string> = {
   overview: 'Visão geral',
@@ -227,6 +295,7 @@ export function App() {
   const [deleteAccountBusy, setDeleteAccountBusy] = useState(false)
   const [deleteAccountError, setDeleteAccountError] = useState('')
   const [insights, setInsights] = useState<Insight[]>([])
+  const [dashboard, setDashboard] = useState<Dashboard>(() => emptyDashboard(currentMonthKey()))
 
   const load = async () => {
     const [transactions, debts, goals, incomeEntries] = await Promise.all([
@@ -289,6 +358,30 @@ export function App() {
   }, [user, selectedMonth, data, incomes, budgets])
 
   useEffect(() => {
+    if (!user) {
+      setDashboard(emptyDashboard(selectedMonth))
+      return
+    }
+
+    let active = true
+    setDashboard(current => current.month === selectedMonth ? current : emptyDashboard(selectedMonth))
+
+    api.request<Dashboard>(`dashboard?month=${selectedMonth}`)
+      .then(result => {
+        if (active) setDashboard(result)
+      })
+      .catch(e => {
+        if (active && (e as { status?: number }).status !== 401) {
+          setError('Não foi possível atualizar o resumo financeiro.')
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [user, selectedMonth, data, incomes, budgets])
+
+  useEffect(() => {
     const handleUnauthorized = () => {
       if (!user) return
       setUser(null)
@@ -299,6 +392,7 @@ export function App() {
       setDebtPayments([])
       setBudgets([])
       setInsights([])
+      setDashboard(emptyDashboard(currentMonthKey()))
       setSelectedMonth(currentMonthKey())
       setView('overview')
       setPasswordOpen(false)
@@ -352,6 +446,7 @@ export function App() {
       setDebtPayments([])
       setBudgets([])
       setInsights([])
+      setDashboard(emptyDashboard(currentMonthKey()))
       setSelectedMonth(currentMonthKey())
       setView('overview')
       setPasswordOpen(false)
@@ -466,6 +561,7 @@ export function App() {
       setDebtPayments([])
       setBudgets([])
       setInsights([])
+      setDashboard(emptyDashboard(currentMonthKey()))
       setSelectedMonth(currentMonthKey())
       setView('overview')
       setMenu(false)
@@ -705,113 +801,7 @@ export function App() {
     }
   }
 
-  const dashboard = useMemo(() => {
-    const monthKey = selectedMonth
-    const monthStart = `${monthKey}-01`
-    const monthEnd = `${monthKey}-31`
-    const belongsToMonth = (raw: string | null | undefined) => Boolean(raw && raw.slice(0, 7) === monthKey)
-
-    const monthly = data.transactions.filter(entry => belongsToMonth(entry.transactionDate))
-    const spent = monthly.reduce((total, entry) => total + entry.value, 0)
-    const activeSalaries = incomes.filter(entry => {
-      const activeUntil = effectiveIncomeEnd(entry)
-      return entry.type === 'salary'
-        && entry.activeFrom <= monthEnd
-        && (!activeUntil || activeUntil >= monthStart)
-    })
-    const salary = activeSalaries.reduce((total, entry) => total + entry.value, 0)
-    const monthlyExtras = incomes.filter(entry => entry.type === 'extra' && belongsToMonth(entry.receivedAt))
-    const extras = monthlyExtras.reduce((total, entry) => total + entry.value, 0)
-    const income = salary + extras
-    const balance = income - spent
-    const debtEntries = data.debts as Debt[]
-    const debt = debtEntries.reduce((total, entry) => total + entry.currentBalance, 0)
-    const debtOriginal = debtEntries.reduce((total, entry) => total + entry.originalAmount, 0)
-    const debtPaid = debtEntries.reduce((total, entry) => total + entry.paidAmount, 0)
-    const debtProgress = debtOriginal > 0 ? (debtPaid / debtOriginal) * 100 : 0
-    const debtMonths = income > 0 ? debt / income : 0
-    const saved = data.goals.reduce((total, entry) => total + entry.saved, 0)
-    const targets = data.goals.reduce((total, entry) => total + entry.target, 0)
-    const goalProgress = targets > 0 ? (saved / targets) * 100 : 0
-    const categoriesData = categories.map(category => {
-      const total = monthly
-        .filter(entry => entry.category === category)
-        .reduce((sum, entry) => sum + entry.value, 0)
-      return {
-        category,
-        total,
-        share: spent > 0 ? (total / spent) * 100 : 0,
-      }
-    }).filter(item => item.total > 0)
-    const budgetData = categories.map(category => {
-      const budget = budgets.find(item => item.category === category)
-      const spentInCategory = monthly
-        .filter(entry => entry.category === category)
-        .reduce((sum, entry) => sum + entry.value, 0)
-      const limit = budget?.limit ?? 0
-      return {
-        category,
-        budget,
-        limit,
-        spent: spentInCategory,
-        remaining: limit - spentInCategory,
-        usage: limit > 0 ? (spentInCategory / limit) * 100 : 0,
-      }
-    })
-    const budgetTotal = budgetData.reduce((total, item) => total + item.limit, 0)
-    const budgetedSpent = budgetData.filter(item => item.limit > 0).reduce((total, item) => total + item.spent, 0)
-    const budgetRemaining = budgetTotal - budgetedSpent
-    const budgetUsage = budgetTotal > 0 ? (budgetedSpent / budgetTotal) * 100 : 0
-
-    return {
-      monthly,
-      spent,
-      activeSalaries,
-      salary,
-      monthlyExtras,
-      extras,
-      income,
-      balance,
-      debt,
-      debtOriginal,
-      debtPaid,
-      debtProgress,
-      debtMonths,
-      saved,
-      targets,
-      goalProgress,
-      categoriesData,
-      budgetData,
-      budgetTotal,
-      budgetedSpent,
-      budgetRemaining,
-      budgetUsage,
-    }
-  }, [data, incomes, budgets, selectedMonth])
-
-  const historyData = useMemo(() => {
-    return Array.from({ length: 6 }, (_, index) => shiftMonthKey(selectedMonth, index - 5)).map(monthKey => {
-      const monthStart = `${monthKey}-01`
-      const monthEnd = `${monthKey}-31`
-      const expenses = data.transactions
-        .filter(entry => entry.transactionDate?.slice(0, 7) === monthKey)
-        .reduce((total, entry) => total + entry.value, 0)
-      const salaries = incomes
-        .filter(entry => {
-          const activeUntil = effectiveIncomeEnd(entry)
-          return entry.type === 'salary'
-            && entry.activeFrom <= monthEnd
-            && (!activeUntil || activeUntil >= monthStart)
-        })
-        .reduce((total, entry) => total + entry.value, 0)
-      const extras = incomes
-        .filter(entry => entry.type === 'extra' && entry.receivedAt?.slice(0, 7) === monthKey)
-        .reduce((total, entry) => total + entry.value, 0)
-      const income = salaries + extras
-      return { monthKey, income, expenses, balance: income - expenses }
-    })
-  }, [data.transactions, incomes, selectedMonth])
-
+  const historyData = dashboard.historyData
   const historyMax = Math.max(1, ...historyData.flatMap(item => [item.income, item.expenses]))
 
   const monthLabel = formatMonth(selectedMonth)
