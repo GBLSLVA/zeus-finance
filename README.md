@@ -21,6 +21,7 @@ Funcionalidades principais:
 - Cálculos oficiais do dashboard centralizados no backend, incluindo histórico de 6 meses e regras de vigência de receitas.
 - ZEUS Insights com análises automáticas de saldo, comparação mensal, categoria dominante, orçamento, dívidas e metas.
 - Resumo financeiro mensal automático com saldo, comparação, principal categoria e pontos de atenção.
+- Assistente "Pergunte ao ZEUS" para responder perguntas sobre saldo, gastos, receitas, categorias, orçamento, dívidas, metas e comparação mensal.
 - Detecção de possíveis lançamentos duplicados, gastos individuais fora do padrão e categorias com alta anormal.
 - Dívidas estruturadas com credor, valor original, saldo atual, juros, parcelas, vencimento e status.
 - Pagamentos parciais de dívidas com histórico, baixa automática do saldo e atualização das parcelas pagas.
@@ -193,7 +194,7 @@ Prioridades seguintes:
 
 - tendências por categoria e detecção de anomalias;
 - resumo financeiro semanal e mensal;
-- assistente conversacional sobre os próprios dados;
+- ampliar o assistente conversacional com histórico de perguntas e linguagem natural mais flexível;
 - movimentações de metas;
 - gastos recorrentes;
 - categorias personalizadas;
