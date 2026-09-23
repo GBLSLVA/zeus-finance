@@ -4,7 +4,9 @@ import { Icon } from './components/Icon'
 import { RecurringExpensesPage } from './features/recurring/RecurringExpensesPage'
 import { BudgetPage } from './features/budgets/BudgetPage'
 import { DebtPage } from './features/debts/DebtPage'
+import { GoalsPage } from './features/goals/GoalsPage'
 import { OverviewPage } from './features/overview/OverviewPage'
+import { TransactionsPage } from './features/transactions/TransactionsPage'
 import {
   categories,
   descriptions,
@@ -18,6 +20,7 @@ import {
   type DebtPayment,
   type EditState,
   type Entry,
+  type GoalMovement,
   type Income,
   type Insight,
   type InsightsResponse,
@@ -55,6 +58,8 @@ export function App() {
   const [editing, setEditing] = useState<EditState>(null)
   const [selectedDebtId, setSelectedDebtId] = useState<number | null>(null)
   const [debtPayments, setDebtPayments] = useState<DebtPayment[]>([])
+  const [selectedGoalId, setSelectedGoalId] = useState<number | null>(null)
+  const [goalMovements, setGoalMovements] = useState<GoalMovement[]>([])
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey())
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([])
@@ -178,6 +183,8 @@ export function App() {
       setEditing(null)
       setSelectedDebtId(null)
       setDebtPayments([])
+      setSelectedGoalId(null)
+      setGoalMovements([])
       setBudgets([])
       setRecurringExpenses([])
       setEditingRecurring(null)
@@ -238,6 +245,8 @@ export function App() {
       setEditing(null)
       setSelectedDebtId(null)
       setDebtPayments([])
+      setSelectedGoalId(null)
+      setGoalMovements([])
       setBudgets([])
       setRecurringExpenses([])
       setEditingRecurring(null)
@@ -384,6 +393,8 @@ export function App() {
       setEditing(null)
       setSelectedDebtId(null)
       setDebtPayments([])
+      setSelectedGoalId(null)
+      setGoalMovements([])
       setBudgets([])
       setRecurringExpenses([])
       setEditingRecurring(null)
@@ -462,26 +473,40 @@ export function App() {
             ? current.debts.map(item => item.id === debt.id ? debt : item)
             : [debt, ...current.debts],
         }))
-      } else {
-        const isEditing = editing?.kind === view
-        const payload = {
-          name: form.get('name'),
-          category: form.get('category'),
-          value: Number(form.get('value')),
-          target: Number(form.get('value')),
-          saved: Number(form.get('saved') ?? 0),
-          transactionDate: form.get('transactionDate'),
-        }
-        const entry = await api.request<Entry>(
-          isEditing ? `${view}/${editing.entry.id}` : view,
+      } else if (view === 'goals') {
+        const isEditing = editing?.kind === 'goals'
+        const goal = await api.request<Entry>(
+          isEditing ? `goals/${editing.entry.id}` : 'goals',
           isEditing ? 'PUT' : 'POST',
-          payload,
+          {
+            name: form.get('name'),
+            target: Number(form.get('value')),
+            saved: isEditing ? undefined : Number(form.get('saved') ?? 0),
+          },
         )
         setData(current => ({
           ...current,
-          [view]: isEditing
-            ? current[view].map(item => item.id === entry.id ? entry : item)
-            : [entry, ...current[view]],
+          goals: isEditing
+            ? current.goals.map(item => item.id === goal.id ? goal : item)
+            : [goal, ...current.goals],
+        }))
+      } else {
+        const isEditing = editing?.kind === 'transactions'
+        const entry = await api.request<Entry>(
+          isEditing ? `transactions/${editing.entry.id}` : 'transactions',
+          isEditing ? 'PUT' : 'POST',
+          {
+            name: form.get('name'),
+            category: form.get('category'),
+            value: Number(form.get('value')),
+            transactionDate: form.get('transactionDate'),
+          },
+        )
+        setData(current => ({
+          ...current,
+          transactions: isEditing
+            ? current.transactions.map(item => item.id === entry.id ? entry : item)
+            : [entry, ...current.transactions],
         }))
       }
       setEditing(null)
@@ -679,6 +704,69 @@ export function App() {
     }
   }
 
+  async function openGoalMovements(goalId: number) {
+    setBusy(true)
+    setError('')
+    try {
+      const movements = await api.request<GoalMovement[]>(`goals/${goalId}/movements`)
+      setSelectedGoalId(goalId)
+      setGoalMovements(movements)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addGoalMovement(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedGoalId) return
+    const element = event.currentTarget
+    const form = new FormData(element)
+    setBusy(true)
+    setError('')
+    try {
+      const result = await api.request<{ movement: GoalMovement; goal: Entry }>(
+        `goals/${selectedGoalId}/movements`,
+        'POST',
+        {
+          type: form.get('type'),
+          amount: Number(form.get('amount')),
+          movementDate: form.get('movementDate'),
+          note: form.get('note'),
+        },
+      )
+      setGoalMovements(current => [result.movement, ...current])
+      setData(current => ({
+        ...current,
+        goals: current.goals.map(item => item.id === result.goal.id ? result.goal : item),
+      }))
+      element.reset()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeGoalMovement(movementId: number) {
+    if (!selectedGoalId || !window.confirm('Excluir esta movimentação? O saldo da meta será recalculado.')) return
+    setBusy(true)
+    setError('')
+    try {
+      const goal = await api.request<Entry>(`goals/${selectedGoalId}/movements/${movementId}`, 'DELETE')
+      setGoalMovements(current => current.filter(movement => movement.id !== movementId))
+      setData(current => ({
+        ...current,
+        goals: current.goals.map(item => item.id === goal.id ? goal : item),
+      }))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function remove(kind: Kind | 'incomes', id: number) {
     if (!window.confirm('Excluir este registro?')) return
     setBusy(true)
@@ -692,6 +780,10 @@ export function App() {
           ...current,
           [kind]: current[kind].filter(entry => entry.id !== id),
         }))
+        if (kind === 'goals' && selectedGoalId === id) {
+          setSelectedGoalId(null)
+          setGoalMovements([])
+        }
       }
     } catch (e) {
       setError((e as Error).message)
@@ -713,6 +805,10 @@ export function App() {
     if (next !== 'debts') {
       setSelectedDebtId(null)
       setDebtPayments([])
+    }
+    if (next !== 'goals') {
+      setSelectedGoalId(null)
+      setGoalMovements([])
     }
     setError('')
   }
@@ -983,6 +1079,26 @@ export function App() {
             onAddPayment={addDebtPayment}
             onRemovePayment={id => { void removeDebtPayment(id) }}
           />
+        ) : view === 'goals' ? (
+          <GoalsPage
+            dashboard={dashboard}
+            goals={data.goals}
+            movements={goalMovements}
+            editing={editing}
+            selectedGoalId={selectedGoalId}
+            busy={busy}
+            onSave={save}
+            onEdit={goal => startEdit('goals', goal)}
+            onRemove={id => { void remove('goals', id) }}
+            onCancelEdit={cancelEdit}
+            onOpenMovements={id => { void openGoalMovements(id) }}
+            onCloseMovements={() => {
+              setSelectedGoalId(null)
+              setGoalMovements([])
+            }}
+            onAddMovement={addGoalMovement}
+            onRemoveMovement={id => { void removeGoalMovement(id) }}
+          />
         ) : view === 'incomes' ? (
           <div className="records-layout">
             <section className="panel records-panel">
@@ -1057,151 +1173,15 @@ export function App() {
             </aside>
           </div>
         ) : (
-          <div className="records-layout">
-            <section className="panel records-panel">
-              <div className="panel__header records-panel__header">
-                <div>
-                  <span className="panel__eyebrow">REGISTROS</span>
-                  <h2>{titles[view]} cadastrados</h2>
-                </div>
-                <span className="records-count">{data[view].length} {data[view].length === 1 ? 'item' : 'itens'}</span>
-              </div>
-
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Descrição</th>
-                      <th>{view === 'goals' ? 'Progresso' : 'Valor'}</th>
-                      <th className="table-action">Ação</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data[view].map(entry => (
-                      <tr key={entry.id}>
-                        <td>
-                          <div className="record-name">
-                            <span className={`record-icon record-icon--${view}`}>
-                              <Icon name={view === 'transactions' ? 'wallet' : 'goal'} size={17} />
-                            </span>
-                            <div>
-                              <strong>{entry.name}</strong>
-                              <span>{view === 'transactions' ? `${entry.category} • ${new Date(entry.transactionDate + 'T12:00:00').toLocaleDateString('pt-BR')}` : `Alvo: ${money(entry.target)}`}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          {view === 'goals' ? (
-                            <div className="table-progress">
-                              <strong>{money(entry.saved)}</strong>
-                              <span>{percent(entry.target > 0 ? (entry.saved / entry.target) * 100 : 0)}</span>
-                            </div>
-                          ) : (
-                            <strong className="table-value">{money(entry.value)}</strong>
-                          )}
-                        </td>
-                        <td className="table-action">
-                          <div className="table-actions">
-                            <button
-                              className="icon-action"
-                              disabled={busy}
-                              onClick={() => startEdit(view, entry)}
-                              aria-label={`Editar ${entry.name}`}
-                            >
-                              <Icon name="edit" size={17} />
-                            </button>
-                            <button
-                              className="icon-action icon-action--danger"
-                              disabled={busy}
-                              onClick={() => remove(view, entry.id)}
-                              aria-label={`Excluir ${entry.name}`}
-                            >
-                              <Icon name="trash" size={17} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {!data[view].length && (
-                      <tr>
-                        <td colSpan={3} className="table-empty">
-                          <div className="empty-block__icon">
-                            <Icon name={view === 'transactions' ? 'wallet' : 'goal'} size={22} />
-                          </div>
-                          <strong>Nenhum registro por aqui.</strong>
-                          <span>Use o formulário ao lado para adicionar o primeiro.</span>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <aside className="panel record-form-panel">
-              <span className="panel__eyebrow">{editing?.kind === view ? 'EDITAR REGISTRO' : 'NOVO REGISTRO'}</span>
-              <h2>{editing?.kind === view ? 'Atualizar' : 'Adicionar'} {view === 'goals' ? 'meta' : 'gasto'}</h2>
-              <p>
-                {view === 'goals'
-                  ? 'Defina um objetivo e informe quanto já conseguiu reservar.'
-                  : 'Registre o gasto e escolha a categoria para acompanhar a distribuição.'}
-              </p>
-
-              <form key={`${view}-${editing?.kind === view ? editing.entry.id : 'new'}`} onSubmit={save}>
-                <label>
-                  <span>Descrição</span>
-                  <input name="name" defaultValue={editing?.kind === view ? editing.entry.name : ''} placeholder={view === 'goals' ? 'Ex.: Reserva de emergência' : 'Ex.: Mercado'} required maxLength={120} />
-                </label>
-
-                {view === 'transactions' && (
-                  <label>
-                    <span>Categoria</span>
-                    <select name="category" defaultValue={editing?.kind === 'transactions' ? editing.entry.category : categories[0]}>
-                      {categories.map(category => <option key={category}>{category}</option>)}
-                    </select>
-                  </label>
-                )}
-
-                <label>
-                  <span>{view === 'goals' ? 'Valor alvo' : 'Valor'}</span>
-                  <div className="money-input">
-                    <span>R$</span>
-                    <input name="value" type="number" min="0.01" max="100000000" step="0.01" defaultValue={editing?.kind === view ? (view === 'goals' ? editing.entry.target : editing.entry.value) : undefined} placeholder="0,00" required />
-                  </div>
-                </label>
-
-                {view === 'transactions' && (
-                  <label>
-                    <span>Data do gasto</span>
-                    <input name="transactionDate" type="date" defaultValue={editing?.kind === 'transactions' ? editing.entry.transactionDate : currentDateKey()} required />
-                  </label>
-                )}
-
-                {view === 'goals' && (
-                  <label>
-                    <span>Valor já reservado</span>
-                    <div className="money-input">
-                      <span>R$</span>
-                      <input name="saved" type="number" min="0" max="100000000" step="0.01" defaultValue={editing?.kind === 'goals' ? editing.entry.saved : 0} required />
-                    </div>
-                  </label>
-                )}
-
-                <div className="form-actions">
-                  <button className="primary primary--full" disabled={busy}>
-                    {busy ? 'Salvando…' : editing?.kind === view ? 'Atualizar registro' : 'Salvar registro'}
-                    {!busy && <Icon name="arrow" size={17} />}
-                  </button>
-                  {editing?.kind === view && <button type="button" className="secondary-button" onClick={cancelEdit}>Cancelar edição</button>}
-                </div>
-              </form>
-
-              <div className="form-security">
-                <Icon name="shield" size={17} />
-                <span>O registro será salvo apenas na sua conta.</span>
-              </div>
-            </aside>
-          </div>
+          <TransactionsPage
+            entries={data.transactions}
+            editing={editing}
+            busy={busy}
+            onSave={save}
+            onEdit={entry => startEdit('transactions', entry)}
+            onRemove={id => { void remove('transactions', id) }}
+            onCancelEdit={cancelEdit}
+          />
         )}
       </main>
 
