@@ -75,6 +75,13 @@ type MonthlySummary = {
   message: string
   highlights: string[]
 }
+type AssistantResponse = {
+  month: string
+  question: string
+  intent: string
+  answer: string
+  suggestions: string[]
+}
 type InsightsResponse = {
   month: string
   income: number
@@ -303,6 +310,9 @@ export function App() {
   const [deleteAccountError, setDeleteAccountError] = useState('')
   const [insights, setInsights] = useState<Insight[]>([])
   const [monthlySummary, setMonthlySummary] = useState<MonthlySummary | null>(null)
+  const [assistantQuestion, setAssistantQuestion] = useState('')
+  const [assistantAnswer, setAssistantAnswer] = useState<AssistantResponse | null>(null)
+  const [assistantBusy, setAssistantBusy] = useState(false)
   const [dashboard, setDashboard] = useState<Dashboard>(() => emptyDashboard(currentMonthKey()))
 
   const load = async () => {
@@ -394,6 +404,11 @@ export function App() {
   }, [user, selectedMonth, data, incomes, budgets])
 
   useEffect(() => {
+    setAssistantAnswer(null)
+    setAssistantQuestion('')
+  }, [selectedMonth])
+
+  useEffect(() => {
     const handleUnauthorized = () => {
       if (!user) return
       setUser(null)
@@ -405,6 +420,9 @@ export function App() {
       setBudgets([])
       setInsights([])
       setMonthlySummary(null)
+      setAssistantQuestion('')
+      setAssistantAnswer(null)
+      setAssistantBusy(false)
       setDashboard(emptyDashboard(currentMonthKey()))
       setSelectedMonth(currentMonthKey())
       setView('overview')
@@ -460,6 +478,9 @@ export function App() {
       setBudgets([])
       setInsights([])
       setMonthlySummary(null)
+      setAssistantQuestion('')
+      setAssistantAnswer(null)
+      setAssistantBusy(false)
       setDashboard(emptyDashboard(currentMonthKey()))
       setSelectedMonth(currentMonthKey())
       setView('overview')
@@ -472,6 +493,31 @@ export function App() {
     } catch (e) {
       setError((e as Error).message)
     }
+  }
+
+  async function askZeusQuestion(question: string) {
+    const cleanQuestion = question.trim()
+    if (!cleanQuestion || assistantBusy) return
+
+    setAssistantBusy(true)
+    setError('')
+    try {
+      const result = await api.request<AssistantResponse>('assistant', 'POST', {
+        month: selectedMonth,
+        question: cleanQuestion,
+      })
+      setAssistantQuestion(cleanQuestion)
+      setAssistantAnswer(result)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setAssistantBusy(false)
+    }
+  }
+
+  async function askZeus(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await askZeusQuestion(assistantQuestion)
   }
 
   async function exportAccountData() {
@@ -576,6 +622,9 @@ export function App() {
       setBudgets([])
       setInsights([])
       setMonthlySummary(null)
+      setAssistantQuestion('')
+      setAssistantAnswer(null)
+      setAssistantBusy(false)
       setDashboard(emptyDashboard(currentMonthKey()))
       setSelectedMonth(currentMonthKey())
       setView('overview')
@@ -1075,6 +1124,59 @@ export function App() {
                 icon="debt"
                 tone="warning"
               />
+            </section>
+
+            <section className="panel assistant-panel" aria-labelledby="zeus-assistant-title">
+              <div className="panel__header assistant-panel__header">
+                <div>
+                  <span className="panel__eyebrow">PERGUNTE AO ZEUS</span>
+                  <h2 id="zeus-assistant-title">Seu painel também responde</h2>
+                  <p>Faça perguntas sobre os números de {monthLabel.toLowerCase()} usando os dados já registrados na sua conta.</p>
+                </div>
+                <span className="insights-badge">Beta</span>
+              </div>
+
+              {assistantAnswer && (
+                <div className="assistant-answer" role="status">
+                  <span>ZEUS</span>
+                  <p>{assistantAnswer.answer}</p>
+                </div>
+              )}
+
+              <form className="assistant-form" onSubmit={askZeus}>
+                <input
+                  value={assistantQuestion}
+                  onChange={event => setAssistantQuestion(event.target.value)}
+                  placeholder="Ex.: Quanto ainda tenho de saldo?"
+                  maxLength={300}
+                  aria-label="Pergunta para o ZEUS"
+                />
+                <button className="primary" type="submit" disabled={assistantBusy || !assistantQuestion.trim()}>
+                  {assistantBusy ? 'Analisando…' : 'Perguntar'}
+                  {!assistantBusy && <Icon name="arrow" size={17} />}
+                </button>
+              </form>
+
+              <div className="assistant-suggestions" aria-label="Sugestões de perguntas">
+                {(assistantAnswer?.suggestions ?? [
+                  'Quanto gastei este mês?',
+                  'Qual foi minha maior categoria de gastos?',
+                  'Quanto ainda tenho de saldo?',
+                  'Me dê um resumo do mês.',
+                ]).slice(0,4).map(suggestion => (
+                  <button
+                    type="button"
+                    key={suggestion}
+                    disabled={assistantBusy}
+                    onClick={() => {
+                      setAssistantQuestion(suggestion)
+                      void askZeusQuestion(suggestion)
+                    }}
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
             </section>
 
             <section className="panel insights-panel" aria-labelledby="zeus-insights-title">
