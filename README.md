@@ -18,6 +18,7 @@ Funcionalidades principais:
 - Rendas extras por data de recebimento.
 - Gastos com data financeira própria, independente da data de cadastro.
 - Dashboard com receita mensal, salário, extras, gastos, saldo estimado, dívida total e metas.
+- ZEUS Insights com análises automáticas de saldo, comparação mensal, categoria dominante, orçamento, dívidas e metas.
 - Dívidas estruturadas com credor, valor original, saldo atual, juros, parcelas, vencimento e status.
 - Pagamentos parciais de dívidas com histórico, baixa automática do saldo e atualização das parcelas pagas.
 - Pagamentos e edições de dívidas protegidos por transações de banco para evitar inconsistências em operações simultâneas.
@@ -136,7 +137,8 @@ A suíte cobre atualmente:
 - persistência;
 - proteção de origem;
 - migração de uma base antiga sem perda dos registros principais;
-- criação, atualização, listagem, remoção e isolamento de orçamentos mensais.
+- criação, atualização, listagem, remoção e isolamento de orçamentos mensais;
+- geração de insights financeiros e isolamento dos insights entre usuários.
 
 ## Build
 
@@ -184,6 +186,9 @@ O projeto já possui preparação para **Render Free + Supabase Free**.
 
 Prioridades seguintes:
 
+- tendências por categoria e detecção de anomalias;
+- resumo financeiro semanal e mensal;
+- assistente conversacional sobre os próprios dados;
 - movimentações de metas;
 - gastos recorrentes;
 - categorias personalizadas;
