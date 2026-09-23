@@ -325,14 +325,14 @@ const postgresMigrations = [
     version: 6,
     name: 'goal_saved_limit',
     sql: `
-      CREATE OR REPLACE FUNCTION enforce_goal_saved_limit() RETURNS trigger AS $
+      CREATE OR REPLACE FUNCTION enforce_goal_saved_limit() RETURNS trigger AS $$
       BEGIN
         IF NEW.kind='goals' AND NEW.saved > NEW.amount THEN
           RAISE EXCEPTION 'goal_saved_exceeds_target';
         END IF;
         RETURN NEW;
       END;
-      $ LANGUAGE plpgsql;
+      $$ LANGUAGE plpgsql;
       DROP TRIGGER IF EXISTS entries_goal_saved_limit ON entries;
       CREATE TRIGGER entries_goal_saved_limit
       BEFORE INSERT OR UPDATE OF amount,saved,kind ON entries
