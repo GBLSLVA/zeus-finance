@@ -167,7 +167,7 @@ svg {
 }
 
 .link-button {
-  min-height: 40px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -416,13 +416,13 @@ svg {
 .auth-form .remember-field small {
   margin: 0;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.4;
 }
 
 .switch-auth {
-  min-height: 40px;
+  min-height: 44px;
   margin-top: 14px;
   padding: 7px 0;
   background: transparent;
@@ -479,7 +479,7 @@ svg {
 .sidebar__brand div > span {
   margin-top: 3px;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 720;
   letter-spacing: 0.16em;
 }
@@ -499,7 +499,7 @@ svg {
   padding: 0 11px;
   margin-bottom: 9px;
   color: #5e6c79;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .sidebar nav {
@@ -546,7 +546,7 @@ svg {
   border-radius: 7px;
   background: #192128;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.6;
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -595,7 +595,7 @@ svg {
 .account-card strong {
   overflow: hidden;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   font-weight: 650;
   text-overflow: ellipsis;
@@ -605,12 +605,12 @@ svg {
 .account-card div span {
   margin-top: 2px;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .logout-button {
   width: 100%;
-  min-height: 40px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -725,7 +725,7 @@ svg {
 
 .security-form small {
   color: var(--subtle);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -767,7 +767,7 @@ svg {
 .security-success span {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -810,7 +810,7 @@ svg {
 .danger-warning span {
   margin-top: 3px;
   color: #d9a5aa;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -1196,7 +1196,7 @@ svg {
 .category-row__name span {
   margin-top: 2px;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .category-row__value {
@@ -1285,19 +1285,19 @@ svg {
 
 .compact-row div strong {
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 680;
 }
 
 .compact-row div span {
   margin-top: 2px;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .compact-row__value {
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1315,7 +1315,7 @@ svg {
 
 .panel-total span {
   color: var(--subtle);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .panel-total strong {
@@ -1332,7 +1332,7 @@ svg {
   gap: 7px;
   padding: 20px;
   color: var(--subtle);
-  font-size: 11px;
+  font-size: 12px;
   text-align: center;
 }
 
@@ -1370,7 +1370,7 @@ svg {
 .goal-overview__summary div span,
 .goal-overview__footer span {
   color: var(--subtle);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .goal-overview__summary div strong {
@@ -1404,7 +1404,7 @@ svg {
 
 .goal-overview__footer strong {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1434,7 +1434,7 @@ svg {
   max-width: 180px;
   overflow: hidden;
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1442,12 +1442,12 @@ svg {
 .goal-preview div span {
   margin-top: 2px;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .goal-preview__percent {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -1890,7 +1890,7 @@ tbody tr:hover td {
   }
 
   .dashboard-hero__main p {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .dashboard-hero__aside > div {
@@ -1900,7 +1900,7 @@ tbody tr:hover td {
   }
 
   .dashboard-hero__aside span {
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .dashboard-hero__aside strong {
@@ -2002,7 +2002,7 @@ tbody tr:hover td {
 
 .income-summary-strip span {
   color: var(--subtle);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 680;
 }
 
@@ -2026,7 +2026,7 @@ tbody tr:hover td {
   min-height: 25px;
   padding: 3px 8px;
   border-radius: 7px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 720;
 }
 
@@ -2044,7 +2044,7 @@ tbody tr:hover td {
   display: block;
   margin-top: 5px;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .metric-card--warning > strong {
@@ -2147,7 +2147,7 @@ tbody tr:hover td {
   min-height: 24px;
   padding: 3px 8px;
   border-radius: 7px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 740;
 }
 
@@ -2182,7 +2182,7 @@ tbody tr:hover td {
 
 .debt-card__values span {
   color: var(--subtle);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .debt-card__values strong {
@@ -2202,7 +2202,7 @@ tbody tr:hover td {
   flex-wrap: wrap;
   gap: 8px 16px;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .debt-card__actions {
@@ -2295,7 +2295,7 @@ tbody tr:hover td {
 .payment-row span {
   margin-top: 3px;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 @media (max-width: 940px) {
@@ -2360,7 +2360,7 @@ tbody tr:hover td {
 }
 
 .period-toolbar__current {
-  min-height: 40px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -2376,13 +2376,13 @@ tbody tr:hover td {
 }
 
 .period-toolbar__current strong {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .period-today {
   padding: 7px 11px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 680;
 }
 
@@ -2414,7 +2414,7 @@ tbody tr:hover td {
 
 .budget-overview__summary span {
   color: var(--subtle);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .budget-overview__summary strong {
@@ -2434,7 +2434,7 @@ tbody tr:hover td {
   gap: 12px;
   margin-top: 8px;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .budget-overview__footer strong {
@@ -2466,18 +2466,18 @@ tbody tr:hover td {
 
 .budget-mini-row div strong {
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .budget-mini-row div span {
   margin-top: 2px;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .budget-mini-row > strong {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .negative-value {
@@ -2517,14 +2517,14 @@ tbody tr:hover td {
 
 .history-row__month strong {
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   text-transform: capitalize;
 }
 
 .history-row__month span {
   margin-top: 2px;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .history-bars {
@@ -2555,13 +2555,13 @@ tbody tr:hover td {
 
 .history-row__values span {
   color: var(--subtle);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .history-row > strong {
   text-align: right;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2575,7 +2575,7 @@ tbody tr:hover td {
   border-top: 1px solid var(--line);
   background: #0f1419;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .history-legend span {
@@ -2649,7 +2649,7 @@ tbody tr:hover td {
 .budget-category-card__header div div span {
   margin-top: 2px;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .budget-category-card__numbers {
@@ -2679,7 +2679,7 @@ tbody tr:hover td {
 .budget-category-card__numbers strong {
   margin-top: 4px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2693,7 +2693,7 @@ tbody tr:hover td {
   gap: 10px;
   margin-top: 7px;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .budget-category-card__usage strong {
@@ -3199,7 +3199,7 @@ tbody tr:hover td {
 }
 
 .assistant-suggestions button {
-  min-height: 40px;
+  min-height: 44px;
   padding: 8px 12px;
   border-color: var(--line-strong);
   background: transparent;
@@ -3261,11 +3261,11 @@ tbody tr:hover td {
 
 .icon-action {
   min-width: 40px;
-  min-height: 40px;
+  min-height: 44px;
 }
 
 .recurring-pay-button {
-  min-height: 40px;
+  min-height: 44px;
 }
 
 @media (max-width: 1180px) {
