@@ -175,13 +175,17 @@ Responsabilidades:
 
 - **ApiClient:** chamadas HTTP da interface.
 - **FinanceApi:** roteamento, validação de origem e respostas HTTP.
-- **FinanceRepository:** fachada/orquestrador financeiro; delega persistência aos repositories especializados e mantém cálculos agregados enquanto services são extraídos gradualmente.
+- **FinanceRepository:** fachada compatível da camada financeira; delega persistência aos repositories e cálculos/orquestração aos services.
 - **UserRepository:** persistência de usuários, credenciais e sessões.
 - **EntryRepository:** persistência e validação de gastos e metas.
 - **DebtRepository:** dívidas, pagamentos, recálculo de saldo e concorrência transacional.
 - **IncomeRepository:** persistência e validação de receitas recorrentes e extras.
 - **BudgetRepository:** persistência e validação de orçamentos mensais por categoria.
 - **RecurringExpenseRepository:** recorrências, vigência, pagamentos mensais e proteção contra duplicidade.
+- **DashboardService:** consolida receitas, gastos, recorrências, dívidas, metas, orçamento e histórico mensal.
+- **InsightService:** tendências, anomalias, alertas e resumo financeiro.
+- **AssistantService:** interpreta perguntas suportadas e combina Dashboard/Insights para responder com dados reais.
+- **ExportService:** gera o backup financeiro completo da conta.
 - **AuthService:** regras de cadastro, login, troca de senha, sessões e proteção contra tentativas excessivas; não executa SQL diretamente.
 - **DatabaseAdapter:** contrato comum da camada de persistência.
 - **SqliteDatabase / PostgresDatabase:** implementações polimórficas do contrato de banco.
@@ -199,7 +203,7 @@ O fuso das datas financeiras usa `APP_TIMEZONE`, com `America/Sao_Paulo` como pa
 
 A evolução do ZEUS segue estes critérios:
 
-- responsabilidade única: autenticação, persistência, HTTP e interface devem permanecer separados;
+- responsabilidade única: autenticação, persistência, regras agregadas, HTTP e interface devem permanecer separados;
 - encapsulamento: services não acessam detalhes internos de outro componente;
 - abstração: regras dependem de contratos estáveis, não de PostgreSQL/SQLite diretamente;
 - polimorfismo: adaptadores de banco podem ser substituídos mantendo a mesma interface;
