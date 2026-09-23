@@ -58,6 +58,12 @@ const monthOnly = value => {
   return value;
 };
 
+const shiftMonthKey = (monthKey, offset) => {
+  const [year, month] = monthKey.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1 + offset, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+};
+
 const normalizeEntry = row => ({
   id: row.id,
   name: row.name,
@@ -125,6 +131,177 @@ const normalizeBudget = row => ({
 
 export class FinanceRepository {
   constructor(database) { this.db = database; }
+
+  async insights(user, month) {
+    const monthKey = monthOnly(month);
+    const previousMonth = shiftMonthKey(monthKey, -1);
+    const monthStart = `${monthKey}-01`;
+    const monthEnd = `${monthKey}-31`;
+
+    const [transactions, debts, goals, incomes, budgets] = await Promise.all([
+      this.list(user, 'transactions'),
+      this.listDebts(user),
+      this.list(user, 'goals'),
+      this.listIncomes(user),
+      this.listBudgets(user, monthKey),
+    ]);
+
+    const monthTransactions = transactions.filter(entry => entry.transactionDate?.slice(0, 7) === monthKey);
+    const previousTransactions = transactions.filter(entry => entry.transactionDate?.slice(0, 7) === previousMonth);
+    const spent = monthTransactions.reduce((total, entry) => total + entry.value, 0);
+    const previousSpent = previousTransactions.reduce((total, entry) => total + entry.value, 0);
+
+    const salary = incomes
+      .filter(entry => entry.type === 'salary'
+        && entry.activeFrom <= monthEnd
+        && (!entry.activeUntil || entry.activeUntil >= monthStart))
+      .reduce((total, entry) => total + entry.value, 0);
+    const extras = incomes
+      .filter(entry => entry.type === 'extra' && entry.receivedAt?.slice(0, 7) === monthKey)
+      .reduce((total, entry) => total + entry.value, 0);
+    const income = salary + extras;
+    const balance = income - spent;
+
+    const categoryTotals = categories.map(category => ({
+      category,
+      total: monthTransactions
+        .filter(entry => entry.category === category)
+        .reduce((sum, entry) => sum + entry.value, 0),
+    })).sort((a,b) => b.total - a.total);
+
+    const items = [];
+
+    if (income > 0 && balance < 0) {
+      items.push({
+        id:'negative-balance',
+        type:'balance',
+        tone:'warning',
+        title:'Gastos acima da renda',
+        message:`Os gastos do mês estão R$ ${Math.abs(balance).toFixed(2)} acima da renda registrada.`,
+        value:balance,
+      });
+    } else if (income > 0) {
+      const committed = spent / income * 100;
+      items.push({
+        id:'income-usage',
+        type:'balance',
+        tone:committed >= 80 ? 'warning' : 'positive',
+        title:committed >= 80 ? 'Renda bastante comprometida' : 'Saldo mensal positivo',
+        message:`${Math.round(committed)}% da renda do mês foi consumida por gastos. Saldo atual: R$ ${balance.toFixed(2)}.`,
+        value:committed,
+      });
+    }
+
+    if (previousSpent > 0) {
+      const change = ((spent - previousSpent) / previousSpent) * 100;
+      const direction = change >= 0 ? 'aumentaram' : 'diminuíram';
+      items.push({
+        id:'spending-change',
+        type:'comparison',
+        tone:change >= 20 ? 'warning' : change <= -10 ? 'positive' : 'info',
+        title:'Comparação com o mês anterior',
+        message:`Seus gastos ${direction} ${Math.abs(Math.round(change))}% em relação ao mês anterior.`,
+        value:change,
+      });
+    } else if (spent > 0) {
+      items.push({
+        id:'spending-baseline',
+        type:'comparison',
+        tone:'info',
+        title:'Primeira referência de gastos',
+        message:'Ainda não há gastos no mês anterior para fazer uma comparação confiável.',
+        value:null,
+      });
+    }
+
+    const topCategory = categoryTotals.find(item => item.total > 0);
+    if (topCategory) {
+      const share = spent > 0 ? (topCategory.total / spent) * 100 : 0;
+      items.push({
+        id:'top-category',
+        type:'category',
+        tone:share >= 50 ? 'warning' : 'info',
+        title:`${topCategory.category} lidera seus gastos`,
+        message:`Essa categoria representa ${Math.round(share)}% dos gastos do mês, com R$ ${topCategory.total.toFixed(2)}.`,
+        value:share,
+      });
+    }
+
+    for (const budget of budgets) {
+      const categorySpent = categoryTotals.find(item => item.category === budget.category)?.total ?? 0;
+      const usage = budget.limit > 0 ? categorySpent / budget.limit * 100 : 0;
+      if (usage >= 100) {
+        items.push({
+          id:`budget-over-${budget.category}`,
+          type:'budget',
+          tone:'warning',
+          title:`Orçamento de ${budget.category} estourado`,
+          message:`O limite foi ultrapassado em R$ ${(categorySpent - budget.limit).toFixed(2)}.`,
+          value:usage,
+        });
+      } else if (usage >= 80) {
+        items.push({
+          id:`budget-near-${budget.category}`,
+          type:'budget',
+          tone:'warning',
+          title:`Orçamento de ${budget.category} perto do limite`,
+          message:`Você já utilizou ${Math.round(usage)}% do limite desta categoria.`,
+          value:usage,
+        });
+      }
+    }
+
+    const debtOriginal = debts.reduce((total, entry) => total + entry.originalAmount, 0);
+    const debtPaid = debts.reduce((total, entry) => total + entry.paidAmount, 0);
+    if (debtOriginal > 0) {
+      const progress = debtPaid / debtOriginal * 100;
+      items.push({
+        id:'debt-progress',
+        type:'debt',
+        tone:progress >= 50 ? 'positive' : 'info',
+        title:'Progresso das dívidas',
+        message:`Você já quitou ${Math.round(progress)}% do valor original das dívidas cadastradas.`,
+        value:progress,
+      });
+    }
+
+    const targetTotal = goals.reduce((total, entry) => total + entry.target, 0);
+    const savedTotal = goals.reduce((total, entry) => total + entry.saved, 0);
+    if (targetTotal > 0) {
+      const progress = savedTotal / targetTotal * 100;
+      items.push({
+        id:'goal-progress',
+        type:'goal',
+        tone:'positive',
+        title:'Evolução das metas',
+        message:`Suas metas estão ${Math.round(progress)}% concluídas, com R$ ${savedTotal.toFixed(2)} reservados.`,
+        value:progress,
+      });
+    }
+
+    if (!items.length) {
+      items.push({
+        id:'getting-started',
+        type:'onboarding',
+        tone:'info',
+        title:'Comece a formar seu histórico',
+        message:'Cadastre receitas, gastos, metas ou orçamentos para o ZEUS gerar análises automáticas.',
+        value:null,
+      });
+    }
+
+    const tonePriority = {warning:0, positive:1, info:2};
+    items.sort((a,b) => tonePriority[a.tone] - tonePriority[b.tone]);
+
+    return {
+      month:monthKey,
+      income,
+      spent,
+      balance,
+      previousSpent,
+      items:items.slice(0,6),
+    };
+  }
 
   async list(user, kind) {
     if (kind === 'debts') return this.listDebts(user);
@@ -667,6 +844,7 @@ export class FinanceApi {
       const user = await this.auth.authenticate(token);
       if (path === '/api/me' && req.method === 'GET') return send(200,(await this.repository.db.query('SELECT id,email FROM users WHERE id=?', [user])).recordset[0]);
       if (path === '/api/export' && req.method === 'GET') return send(200,await this.repository.exportUserData(user));
+      if (path === '/api/insights' && req.method === 'GET') return send(200,await this.repository.insights(user,url.searchParams.get('month')));
       if (path === '/api/logout' && req.method === 'POST') {
         await this.auth.logout(token);
         return send(200,{}, {'Set-Cookie':`zeus_session=; HttpOnly; SameSite=Strict; Path=/api; Max-Age=0${secure}`});
