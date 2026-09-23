@@ -117,6 +117,9 @@ const formatMonth = (monthKey: string) => {
 
 const percent = (value: number) => `${Math.round(Math.max(0, Math.min(100, value)))}%`
 
+const effectiveIncomeEnd = (entry: Income) =>
+  entry.activeUntil ?? (!entry.active ? entry.updatedAt?.slice(0, 10) || entry.activeFrom : null)
+
 function Icon({ name, size = 20 }: { name: 'overview' | 'income' | 'budget' | 'wallet' | 'debt' | 'goal' | 'logout' | 'plus' | 'menu' | 'close' | 'arrow' | 'edit' | 'trash' | 'shield' | 'calendar'; size?: number }) {
   const common = {
     width: size,
@@ -210,8 +213,14 @@ export function App() {
   useEffect(() => {
     api.request<User>('me')
       .then(async currentUser => {
-        await load()
         setUser(currentUser)
+        try {
+          await load()
+        } catch (e) {
+          if ((e as { status?: number }).status !== 401) {
+            setError('Sua conta foi carregada, mas houve uma falha ao buscar os dados financeiros.')
+          }
+        }
       })
       .catch(e => {
         if ((e as { status?: number }).status !== 401) {
@@ -257,8 +266,14 @@ export function App() {
         email: form.get('email'),
         password: form.get('password'),
       })
-      await load()
       setUser(currentUser)
+      try {
+        await load()
+      } catch (e) {
+        if ((e as { status?: number }).status !== 401) {
+          setError('Login realizado, mas houve uma falha ao carregar seus dados financeiros.')
+        }
+      }
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -512,14 +527,12 @@ export function App() {
 
     const monthly = data.transactions.filter(entry => belongsToMonth(entry.transactionDate))
     const spent = monthly.reduce((total, entry) => total + entry.value, 0)
-    const activeSalaries = incomes.filter(entry =>
-      entry.type === 'salary'
-      && entry.activeFrom <= monthEnd
-      && (
-        (entry.activeUntil && entry.activeUntil >= monthStart)
-        || (!entry.activeUntil && entry.active)
-      ),
-    )
+    const activeSalaries = incomes.filter(entry => {
+      const activeUntil = effectiveIncomeEnd(entry)
+      return entry.type === 'salary'
+        && entry.activeFrom <= monthEnd
+        && (!activeUntil || activeUntil >= monthStart)
+    })
     const salary = activeSalaries.reduce((total, entry) => total + entry.value, 0)
     const monthlyExtras = incomes.filter(entry => entry.type === 'extra' && belongsToMonth(entry.receivedAt))
     const extras = monthlyExtras.reduce((total, entry) => total + entry.value, 0)
@@ -598,11 +611,12 @@ export function App() {
         .filter(entry => entry.transactionDate?.slice(0, 7) === monthKey)
         .reduce((total, entry) => total + entry.value, 0)
       const salaries = incomes
-        .filter(entry =>
-          entry.type === 'salary'
-          && entry.activeFrom <= monthEnd
-          && ((entry.activeUntil && entry.activeUntil >= monthStart) || (!entry.activeUntil && entry.active)),
-        )
+        .filter(entry => {
+          const activeUntil = effectiveIncomeEnd(entry)
+          return entry.type === 'salary'
+            && entry.activeFrom <= monthEnd
+            && (!activeUntil || activeUntil >= monthStart)
+        })
         .reduce((total, entry) => total + entry.value, 0)
       const extras = incomes
         .filter(entry => entry.type === 'extra' && entry.receivedAt?.slice(0, 7) === monthKey)
@@ -1333,7 +1347,7 @@ export function App() {
                           <span className={`income-type income-type--${entry.type}`}>{entry.type === 'salary' ? 'Salário' : 'Extra'}</span>
                           <small className="income-date">
                             {entry.type === 'salary'
-                              ? `${new Date(entry.activeFrom + 'T12:00:00').toLocaleDateString('pt-BR')} → ${entry.activeUntil ? new Date(entry.activeUntil + 'T12:00:00').toLocaleDateString('pt-BR') : 'atual'}`
+                              ? `${new Date(entry.activeFrom + 'T12:00:00').toLocaleDateString('pt-BR')} → ${effectiveIncomeEnd(entry) ? new Date(effectiveIncomeEnd(entry)! + 'T12:00:00').toLocaleDateString('pt-BR') : 'atual'}`
                               : new Date(entry.receivedAt.replace(' ', 'T') + 'Z').toLocaleDateString('pt-BR')}
                           </small>
                         </td>

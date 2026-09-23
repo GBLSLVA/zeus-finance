@@ -137,6 +137,29 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal(salaryEdited.data.active,false);
     assert.equal(salaryEdited.data.activeUntil,'2026-08-31');
 
+    const salaryAutoEnd = await call('incomes','POST',{
+      name:'Salário temporário',
+      type:'salary',
+      value:1200,
+      activeFrom:'2026-06-01',
+      activeUntil:null,
+      active:true,
+    },first.cookie);
+    assert.equal(salaryAutoEnd.status,201);
+
+    const salaryAutoEnded = await call(`incomes/${salaryAutoEnd.data.id}`,'PUT',{
+      name:'Salário temporário',
+      type:'salary',
+      value:1200,
+      activeFrom:'2026-06-01',
+      activeUntil:null,
+      active:false,
+    },first.cookie);
+    assert.equal(salaryAutoEnded.status,200);
+    assert.equal(salaryAutoEnded.data.active,false);
+    assert.match(salaryAutoEnded.data.activeUntil,/^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(salaryAutoEnded.data.activeUntil >= '2026-06-01');
+
     const extra = await call('incomes','POST',{
       name:'Freelance',
       type:'extra',
@@ -148,7 +171,7 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal(extra.data.recurrence,'once');
 
     assert.equal((await call('incomes','POST',{name:'Inválida',type:'bonus',value:100},first.cookie)).status,400);
-    assert.equal((await call('incomes','GET',undefined,first.cookie)).data.length,2);
+    assert.equal((await call('incomes','GET',undefined,first.cookie)).data.length,3);
 
     const foodBudget = await call('budgets','POST',{month:'2026-09',category:'Comida',limit:800},first.cookie);
     assert.equal(foodBudget.status,200);
