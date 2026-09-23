@@ -361,7 +361,30 @@ export class FinanceRepository {
 }
 
 export class AuthService {
-  constructor(repository) { this.db = repository.db; this.attempts = new Map(); }
+  constructor(repository) {
+    this.db = repository.db;
+    this.attempts = new Map();
+    this.loginWindowMs = 10 * 60 * 1000;
+    this.maxLoginFailures = 20;
+  }
+
+  attemptKey(address, email) {
+    return `${address || 'unknown'}|${email}`;
+  }
+
+  pruneAttempts(now) {
+    for (const [key, entry] of this.attempts) {
+      if (entry.until <= now) this.attempts.delete(key);
+    }
+  }
+
+  registerFailedLogin(key, now) {
+    const previous = this.attempts.get(key);
+    const entry = previous && previous.until > now
+      ? {count: previous.count + 1, until: previous.until}
+      : {count: 1, until: now + this.loginWindowMs};
+    this.attempts.set(key, entry);
+  }
 
   async authenticate(token) {
     if (!token) throw new HttpError(401, 'Entre na sua conta.');
@@ -372,13 +395,18 @@ export class AuthService {
 
   async login(data, register, address) {
     const now = Date.now();
-    for (const [key, entry] of this.attempts) if (entry.until < now) this.attempts.delete(key);
-    const attempts = this.attempts.get(address) ?? {count: 0, until: now + 600000};
-    if (++attempts.count > 20) throw new HttpError(429, 'Muitas tentativas. Aguarde dez minutos.');
-    this.attempts.set(address, attempts);
+    this.pruneAttempts(now);
+
     const email = text(data.email, 254).toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, 'E-mail inválido.');
     if (typeof data.password !== 'string' || data.password.length < 12 || data.password.length > 128) throw new HttpError(400, 'Use uma senha entre 12 e 128 caracteres.');
+
+    const attemptKey = this.attemptKey(address, email);
+    const attempts = this.attempts.get(attemptKey);
+    if (!register && attempts && attempts.until > now && attempts.count >= this.maxLoginFailures) {
+      throw new HttpError(429, 'Muitas tentativas. Aguarde dez minutos.');
+    }
+
     let user = (await this.db.query('SELECT * FROM users WHERE email=?', [email])).recordset[0];
     if (register) {
       if (user) throw new HttpError(409, 'Não foi possível cadastrar este e-mail.');
@@ -389,8 +417,13 @@ export class AuthService {
     } else {
       const [salt, hash] = (user?.password ?? `${'0'.repeat(32)}:${'0'.repeat(128)}`).split(':');
       const valid = timingSafeEqual(scryptSync(data.password, salt, 64), Buffer.from(hash, 'hex'));
-      if (!user || !valid) throw new HttpError(401, 'E-mail ou senha incorretos.');
+      if (!user || !valid) {
+        this.registerFailedLogin(attemptKey, now);
+        throw new HttpError(401, 'E-mail ou senha incorretos.');
+      }
+      this.attempts.delete(attemptKey);
     }
+
     const token = randomBytes(32).toString('hex');
     await this.db.query('DELETE FROM sessions WHERE expires<=?', [now]);
     await this.db.query('INSERT INTO sessions(token,user_id,expires) VALUES(?,?,?)', [digest(token),user.id,now+86400000]);
