@@ -257,6 +257,36 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal(dashboard.data.historyData.at(-1).monthKey,'2026-09');
     assert.equal((await call('dashboard?month=2026-13','GET',undefined,first.cookie)).status,400);
 
+    const assistantExpenses = await call('assistant','POST',{
+      month:'2026-09',
+      question:'Quanto gastei este mês?',
+    },first.cookie);
+    assert.equal(assistantExpenses.status,200);
+    assert.equal(assistantExpenses.data.intent,'expenses');
+    assert.match(assistantExpenses.data.answer,/R\$\s*20,00/);
+    assert.ok(Array.isArray(assistantExpenses.data.suggestions));
+
+    const assistantBalance = await call('assistant','POST',{
+      month:'2026-09',
+      question:'Quanto ainda tenho de saldo?',
+    },first.cookie);
+    assert.equal(assistantBalance.status,200);
+    assert.equal(assistantBalance.data.intent,'balance');
+    assert.match(assistantBalance.data.answer,/R\$\s*1\.630,00/);
+
+    const assistantCategory = await call('assistant','POST',{
+      month:'2026-09',
+      question:'Quanto gastei com comida?',
+    },first.cookie);
+    assert.equal(assistantCategory.status,200);
+    assert.equal(assistantCategory.data.intent,'category-spending');
+    assert.match(assistantCategory.data.answer,/Comida/);
+
+    assert.equal((await call('assistant','POST',{
+      month:'2026-13',
+      question:'Qual meu saldo?',
+    },first.cookie)).status,400);
+
     const second = await call('register','POST',{email:'b@example.com',password:'secure-password-456'});
     assert.deepEqual((await call('transactions','GET',undefined,second.cookie)).data,[]);
 
@@ -282,6 +312,22 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal(secondDashboard.data.debt,0);
     assert.equal(secondDashboard.data.saved,0);
     assert.equal(secondDashboard.data.income,0);
+
+    const secondAssistant = await call('assistant','POST',{
+      month:'2026-09',
+      question:'Quanto gastei este mês?',
+    },second.cookie);
+    assert.equal(secondAssistant.status,200);
+    assert.equal(secondAssistant.data.intent,'expenses');
+    assert.match(secondAssistant.data.answer,/R\$\s*77,00/);
+    assert.equal(secondAssistant.data.answer.includes('20,00'),false);
+
+    const assistantHelp = await call('assistant','POST',{
+      month:'2026-09',
+      question:'O que você consegue fazer?',
+    },second.cookie);
+    assert.equal(assistantHelp.status,200);
+    assert.equal(assistantHelp.data.intent,'help');
 
     const firstExport = await call('export','GET',undefined,first.cookie);
     assert.equal(firstExport.status,200);
