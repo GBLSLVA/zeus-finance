@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { api } from './api'
 
 type Kind = 'transactions' | 'debts' | 'goals'
-type View = Kind | 'incomes' | 'budgets' | 'overview'
+type View = Kind | 'incomes' | 'budgets' | 'recurring' | 'overview'
 type Category = 'Casa' | 'Comida' | 'Transporte' | 'Lazer' | 'Outros'
 type Entry = {
   id: number
@@ -40,6 +40,18 @@ type Budget = {
   month: string
   category: Category
   limit: number
+  createdAt: string
+  updatedAt: string
+}
+type RecurringExpense = {
+  id: number
+  name: string
+  category: Category
+  value: number
+  dueDay: number
+  activeFrom: string
+  activeUntil: string | null
+  active: boolean
   createdAt: string
   updatedAt: string
 }
@@ -102,6 +114,10 @@ type Dashboard = {
   extras: number
   income: number
   balance: number
+  recurringExpenses: Array<RecurringExpense & { scheduledDate: string }>
+  recurringTotal: number
+  projectedSpent: number
+  projectedBalance: number
   debt: number
   debtOriginal: number
   debtPaid: number
@@ -136,6 +152,10 @@ const emptyDashboard = (month: string): Dashboard => ({
   extras: 0,
   income: 0,
   balance: 0,
+  recurringExpenses: [],
+  recurringTotal: 0,
+  projectedSpent: 0,
+  projectedBalance: 0,
   debt: 0,
   debtOriginal: 0,
   debtPaid: 0,
@@ -164,6 +184,7 @@ const titles: Record<View, string> = {
   overview: 'Visão geral',
   incomes: 'Receitas',
   budgets: 'Orçamentos',
+  recurring: 'Recorrentes',
   transactions: 'Gastos',
   debts: 'Dívidas',
   goals: 'Metas',
@@ -173,6 +194,7 @@ const descriptions: Record<View, string> = {
   overview: 'Receitas, gastos, dívidas e metas no mesmo panorama.',
   incomes: 'Cadastre seu salário mensal e todas as rendas extras.',
   budgets: 'Defina limites mensais por categoria e acompanhe o consumo.',
+  recurring: 'Cadastre compromissos mensais e acompanhe o saldo projetado.',
   transactions: 'Acompanhe para onde o seu dinheiro está indo.',
   debts: 'Organize os valores que ainda precisam ser pagos.',
   goals: 'Transforme objetivos em progresso visível.',
@@ -300,6 +322,8 @@ export function App() {
   const [debtPayments, setDebtPayments] = useState<DebtPayment[]>([])
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey())
   const [budgets, setBudgets] = useState<Budget[]>([])
+  const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([])
+  const [editingRecurring, setEditingRecurring] = useState<RecurringExpense | null>(null)
   const [exportBusy, setExportBusy] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [passwordBusy, setPasswordBusy] = useState(false)
@@ -316,14 +340,16 @@ export function App() {
   const [dashboard, setDashboard] = useState<Dashboard>(() => emptyDashboard(currentMonthKey()))
 
   const load = async () => {
-    const [transactions, debts, goals, incomeEntries] = await Promise.all([
+    const [transactions, debts, goals, incomeEntries, recurringEntries] = await Promise.all([
       api.request<Entry[]>('transactions'),
       api.request<Debt[]>('debts'),
       api.request<Entry[]>('goals'),
       api.request<Income[]>('incomes'),
+      api.request<RecurringExpense[]>('recurring-expenses'),
     ])
     setData({ transactions, debts, goals })
     setIncomes(incomeEntries)
+    setRecurringExpenses(recurringEntries)
   }
 
   useEffect(() => {
@@ -401,7 +427,7 @@ export function App() {
     return () => {
       active = false
     }
-  }, [user, selectedMonth, data, incomes, budgets])
+  }, [user, selectedMonth, data, incomes, budgets, recurringExpenses])
 
   useEffect(() => {
     setAssistantAnswer(null)
@@ -418,6 +444,8 @@ export function App() {
       setSelectedDebtId(null)
       setDebtPayments([])
       setBudgets([])
+      setRecurringExpenses([])
+      setEditingRecurring(null)
       setInsights([])
       setMonthlySummary(null)
       setAssistantQuestion('')
@@ -476,6 +504,8 @@ export function App() {
       setSelectedDebtId(null)
       setDebtPayments([])
       setBudgets([])
+      setRecurringExpenses([])
+      setEditingRecurring(null)
       setInsights([])
       setMonthlySummary(null)
       setAssistantQuestion('')
@@ -620,6 +650,8 @@ export function App() {
       setSelectedDebtId(null)
       setDebtPayments([])
       setBudgets([])
+      setRecurringExpenses([])
+      setEditingRecurring(null)
       setInsights([])
       setMonthlySummary(null)
       setAssistantQuestion('')
@@ -781,6 +813,56 @@ export function App() {
     }
   }
 
+  async function saveRecurringExpense(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const element = event.currentTarget
+    const form = new FormData(element)
+    setBusy(true)
+    setError('')
+    try {
+      const payload = {
+        name: form.get('name'),
+        category: form.get('category'),
+        value: Number(form.get('value')),
+        dueDay: Number(form.get('dueDay')),
+        activeFrom: form.get('activeFrom'),
+        activeUntil: form.get('activeUntil') || null,
+        active: form.get('active') === 'on',
+      }
+      const item = await api.request<RecurringExpense>(
+        editingRecurring ? `recurring-expenses/${editingRecurring.id}` : 'recurring-expenses',
+        editingRecurring ? 'PUT' : 'POST',
+        payload,
+      )
+      setRecurringExpenses(current =>
+        editingRecurring
+          ? current.map(entry => entry.id === item.id ? item : entry)
+          : [...current, item].sort((a,b) => a.dueDay - b.dueDay),
+      )
+      setEditingRecurring(null)
+      element.reset()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeRecurringExpense(id: number) {
+    if (!window.confirm('Excluir este gasto recorrente?')) return
+    setBusy(true)
+    setError('')
+    try {
+      await api.request(`recurring-expenses/${id}`, 'DELETE')
+      setRecurringExpenses(current => current.filter(item => item.id !== id))
+      if (editingRecurring?.id === id) setEditingRecurring(null)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function openDebtPayments(debtId: number) {
     setBusy(true)
     setError('')
@@ -874,6 +956,7 @@ export function App() {
     setView(next)
     setMenu(false)
     setEditing(null)
+    setEditingRecurring(null)
     if (next !== 'debts') {
       setSelectedDebtId(null)
       setDebtPayments([])
@@ -965,10 +1048,11 @@ export function App() {
     )
   }
 
-  const navItems: Array<{ key: View; label: string; icon: 'overview' | 'income' | 'budget' | 'wallet' | 'debt' | 'goal' }> = [
+  const navItems: Array<{ key: View; label: string; icon: 'overview' | 'income' | 'budget' | 'wallet' | 'debt' | 'goal' | 'calendar' }> = [
     { key: 'overview', label: 'Visão geral', icon: 'overview' },
     { key: 'incomes', label: 'Receitas', icon: 'income' },
     { key: 'budgets', label: 'Orçamentos', icon: 'budget' },
+    { key: 'recurring', label: 'Recorrentes', icon: 'calendar' },
     { key: 'transactions', label: 'Gastos', icon: 'wallet' },
     { key: 'debts', label: 'Dívidas', icon: 'debt' },
     { key: 'goals', label: 'Metas', icon: 'goal' },
@@ -1003,7 +1087,7 @@ export function App() {
               <span>{item.label}</span>
               {item.key !== 'overview' && (
                 <span className="nav-count">
-                  {item.key === 'incomes' ? incomes.length : item.key === 'budgets' ? budgets.length : item.key === 'transactions' ? data.transactions.length : item.key === 'debts' ? data.debts.length : data.goals.length}
+                  {item.key === 'incomes' ? incomes.length : item.key === 'budgets' ? budgets.length : item.key === 'recurring' ? recurringExpenses.length : item.key === 'transactions' ? data.transactions.length : item.key === 'debts' ? data.debts.length : data.goals.length}
                 </span>
               )}
             </button>
@@ -1116,6 +1200,13 @@ export function App() {
                 value={money(dashboard.spent)}
                 detail={dashboard.monthly.length ? `${dashboard.monthly.length} lançamento${dashboard.monthly.length === 1 ? '' : 's'} registrado${dashboard.monthly.length === 1 ? '' : 's'}` : 'Nenhum gasto no mês'}
                 icon="wallet"
+              />
+              <MetricCard
+                label="Saldo projetado"
+                value={money(dashboard.projectedBalance)}
+                detail={dashboard.recurringTotal > 0 ? `${money(dashboard.recurringTotal)} em compromissos recorrentes neste mês` : 'Sem compromissos recorrentes ativos no mês'}
+                icon="budget"
+                tone={dashboard.projectedBalance >= 0 ? 'accent' : 'warning'}
               />
               <MetricCard
                 label="Dívida total"
