@@ -282,6 +282,7 @@ export function App() {
       const currentUser = await api.request<User>(register ? 'register' : 'login', 'POST', {
         email: form.get('email'),
         password: form.get('password'),
+        remember: form.get('remember') === 'on',
       })
       setUser(currentUser)
       try {
@@ -842,6 +843,13 @@ export function App() {
                 />
               </label>
               <small>Use no mínimo 12 caracteres.</small>
+              <label className="remember-field">
+                <input name="remember" type="checkbox" />
+                <span>
+                  Manter conectado por 30 dias
+                  <small>Use apenas neste dispositivo se ele for confiável.</small>
+                </span>
+              </label>
               <button className="primary primary--full" disabled={busy}>
                 {busy ? 'Aguarde…' : register ? 'Criar conta' : 'Entrar no ZEUS'}
                 {!busy && <Icon name="arrow" size={18} />}

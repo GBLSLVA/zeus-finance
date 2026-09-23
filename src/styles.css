@@ -387,6 +387,40 @@ svg {
   font-size: 12px;
 }
 
+.auth-form .remember-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-form .remember-field input {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  min-height: 18px;
+  margin: 1px 0 0;
+  padding: 0;
+  accent-color: var(--accent);
+  box-shadow: none;
+}
+
+.auth-form .remember-field span {
+  display: grid;
+  gap: 3px;
+}
+
+.auth-form .remember-field small {
+  margin: 0;
+  color: var(--subtle);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
 .switch-auth {
   min-height: 40px;
   margin-top: 14px;

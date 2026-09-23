@@ -25,6 +25,8 @@ const dateOnly = (value, {optional = false} = {}) => {
 };
 
 const digest = value => createHash('sha256').update(value).digest('hex');
+const defaultSessionMaxAgeSeconds = 24 * 60 * 60;
+const rememberedSessionMaxAgeSeconds = 30 * 24 * 60 * 60;
 const dummyPasswordHash = `${'0'.repeat(32)}:${'0'.repeat(128)}`;
 
 const createPasswordHash = password => {
@@ -516,9 +518,10 @@ export class AuthService {
     }
 
     const token = randomBytes(32).toString('hex');
+    const maxAgeSeconds = data.remember === true ? rememberedSessionMaxAgeSeconds : defaultSessionMaxAgeSeconds;
     await this.db.query('DELETE FROM sessions WHERE expires<=?', [now]);
-    await this.db.query('INSERT INTO sessions(token,user_id,expires) VALUES(?,?,?)', [digest(token),user.id,now+86400000]);
-    return {token, user: {id:user.id,email:user.email}};
+    await this.db.query('INSERT INTO sessions(token,user_id,expires) VALUES(?,?,?)', [digest(token),user.id,now+(maxAgeSeconds * 1000)]);
+    return {token, maxAgeSeconds, user: {id:user.id,email:user.email}};
   }
 
   async changePassword(userId, token, data) {
@@ -651,7 +654,7 @@ export class FinanceApi {
 
       if (['/api/register','/api/login'].includes(path) && req.method === 'POST') {
         const result = await this.auth.login(await this.body(req),path === '/api/register',this.clientAddress(req));
-        return send(200,result.user,{'Set-Cookie':`zeus_session=${result.token}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=86400${secure}`});
+        return send(200,result.user,{'Set-Cookie':`zeus_session=${result.token}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=${result.maxAgeSeconds}${secure}`});
       }
 
       const user = await this.auth.authenticate(token);

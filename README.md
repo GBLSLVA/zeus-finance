@@ -9,6 +9,7 @@ Versão em evolução para **ZEUS 1.1**.
 Funcionalidades principais:
 
 - Cadastro, login e logout com sessão por cookie.
+- Sessão padrão de 24 horas, com opção explícita de manter o dispositivo conectado por 30 dias.
 - Troca de senha exigindo a senha atual, com encerramento automático das outras sessões.
 - Exclusão segura da conta, com confirmação por senha e remoção transacional dos dados do usuário.
 - Exportação completa dos dados da conta em backup JSON isolado por usuário.
