@@ -28,7 +28,7 @@ const delimiter = ';'
 const csvCell = (value: unknown) => {
   const text = value === null || value === undefined ? '' : String(value)
   if (!/[;"\r\n]/.test(text)) return text
-  return `"${text.replaceAll('"', '""')}"`
+  return `"${text.replace(/"/g, '""')}"`
 }
 
 const safeUserText = (value: string) => {
