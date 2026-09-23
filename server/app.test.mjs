@@ -227,6 +227,10 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal(insights.status,200);
     assert.equal(insights.data.month,'2026-09');
     assert.equal(insights.data.spent,20);
+    assert.equal(insights.data.summary.tone,'positive');
+    assert.equal(typeof insights.data.summary.title,'string');
+    assert.match(insights.data.summary.message,/saldo/i);
+    assert.ok(Array.isArray(insights.data.summary.highlights));
     assert.ok(Array.isArray(insights.data.items));
     assert.ok(insights.data.items.some(item => item.id === 'top-category' && item.title.includes('Comida')));
     assert.ok(insights.data.items.some(item => item.id === 'debt-progress'));
@@ -267,6 +271,8 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     const secondInsights = await call('insights?month=2026-09','GET',undefined,second.cookie);
     assert.equal(secondInsights.status,200);
     assert.equal(secondInsights.data.spent,77);
+    assert.equal(secondInsights.data.summary.tone,'info');
+    assert.match(secondInsights.data.summary.title,/gastos registrados/i);
     assert.equal(secondInsights.data.items.some(item => item.id === 'debt-progress'),false);
     assert.equal(secondInsights.data.items.some(item => item.id === 'goal-progress'),false);
 
