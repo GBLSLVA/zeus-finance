@@ -13,6 +13,9 @@ export class ApiClient {
     } catch {
       if (!response.ok) throw new ApiError('Falha ao acessar o servidor.', response.status);
     }
+    if (response.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('zeus:unauthorized'))
+    }
     if (!response.ok) throw new ApiError((data as { error?: string }).error ?? 'Falha ao acessar o servidor.', response.status);
     return data as T;
   }
