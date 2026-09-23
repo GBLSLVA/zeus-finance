@@ -2,6 +2,7 @@ import { HttpError } from '../http-error.mjs';
 import { normalizeBudget, normalizeIncome } from '../domain/finance-values.mjs';
 import { normalizeDebt, normalizeDebtPayment } from '../repositories/debt-repository.mjs';
 import { normalizeEntry } from '../repositories/entry-repository.mjs';
+import { normalizeGoalMovement } from '../repositories/goal-repository.mjs';
 import { normalizeRecurringExpense } from '../repositories/recurring-expense-repository.mjs';
 
 export class ExportService {
@@ -37,14 +38,19 @@ export class ExportService {
       'SELECT * FROM recurring_expenses WHERE user_id=? ORDER BY due_day,id',
       [user],
     )).recordset;
+    const goalMovements = (await this.database.query(
+      'SELECT * FROM goal_movements WHERE user_id=? ORDER BY movement_date,id',
+      [user],
+    )).recordset;
 
     return {
       format: 'zeus-finance-backup',
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       account: {email:account.email},
       transactions: entries.filter(row => row.kind === 'transactions').map(normalizeEntry),
       goals: entries.filter(row => row.kind === 'goals').map(normalizeEntry),
+      goalMovements: goalMovements.map(normalizeGoalMovement),
       incomes: incomes.map(normalizeIncome),
       debts: debts.map(normalizeDebt),
       debtPayments: debtPayments.map(normalizeDebtPayment),
