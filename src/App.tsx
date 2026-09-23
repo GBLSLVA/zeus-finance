@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from './api'
+import { buildFinanceCsv, type FinanceBackup } from './utils/csv'
 import { Icon } from './components/Icon'
 import { RecurringExpensesPage } from './features/recurring/RecurringExpensesPage'
 import { BudgetPage } from './features/budgets/BudgetPage'
@@ -37,6 +38,18 @@ import {
   money,
   shiftMonthKey,
 } from './utils/finance'
+
+function downloadText(content: string, mimeType: string, filename: string) {
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
 
 export function App() {
   const [user, setUser] = useState<User | null>(null)
@@ -297,17 +310,32 @@ export function App() {
     setError('')
     setNotice('')
     try {
-      const payload = await api.request<Record<string, unknown>>('export')
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `zeus-finance-backup-${currentDateKey()}.json`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 0)
-      setNotice('Backup exportado com sucesso.')
+      const payload = await api.request<FinanceBackup>('export')
+      downloadText(
+        JSON.stringify(payload, null, 2),
+        'application/json;charset=utf-8',
+        `zeus-finance-backup-${currentDateKey()}.json`,
+      )
+      setNotice('Backup JSON exportado com sucesso.')
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
+  async function exportAccountCsv() {
+    setExportBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const payload = await api.request<FinanceBackup>('export')
+      downloadText(
+        buildFinanceCsv(payload),
+        'text/csv;charset=utf-8',
+        `zeus-finance-${currentDateKey()}.csv`,
+      )
+      setNotice('CSV financeiro exportado com sucesso.')
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -951,7 +979,11 @@ export function App() {
           </div>
           <button className="logout-button account-action-button" onClick={exportAccountData} disabled={exportBusy}>
             <Icon name="download" size={18} />
-            {exportBusy ? 'Exportando…' : 'Exportar dados'}
+            {exportBusy ? 'Exportando…' : 'Backup JSON'}
+          </button>
+          <button className="logout-button account-action-button" onClick={exportAccountCsv} disabled={exportBusy}>
+            <Icon name="download" size={18} />
+            {exportBusy ? 'Exportando…' : 'Exportar CSV'}
           </button>
           <button className="logout-button account-action-button" onClick={openPasswordDialog}>
             <Icon name="shield" size={18} />
