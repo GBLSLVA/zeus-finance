@@ -213,8 +213,14 @@ export function App() {
   useEffect(() => {
     api.request<User>('me')
       .then(async currentUser => {
-        await load()
         setUser(currentUser)
+        try {
+          await load()
+        } catch (e) {
+          if ((e as { status?: number }).status !== 401) {
+            setError('Sua conta foi carregada, mas houve uma falha ao buscar os dados financeiros.')
+          }
+        }
       })
       .catch(e => {
         if ((e as { status?: number }).status !== 401) {
@@ -260,8 +266,14 @@ export function App() {
         email: form.get('email'),
         password: form.get('password'),
       })
-      await load()
       setUser(currentUser)
+      try {
+        await load()
+      } catch (e) {
+        if ((e as { status?: number }).status !== 401) {
+          setError('Login realizado, mas houve uma falha ao carregar seus dados financeiros.')
+        }
+      }
     } catch (e) {
       setError((e as Error).message)
     } finally {
