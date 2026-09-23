@@ -193,7 +193,7 @@ Responsabilidades:
 - **src/utils/finance.ts:** formatação e utilitários de datas/percentuais.
 - **server/domain/finance-values.mjs:** validações e normalizadores compartilhados do domínio financeiro.
 - **src/components:** componentes visuais reutilizáveis do React.
-- **src/features:** módulos de interface por funcionalidade; Assistente, Insights e Recorrências já foram extraídos do App principal.
+- **src/features:** módulos de interface por funcionalidade; Visão Geral, Assistente, Insights, Recorrências, Orçamentos e Dívidas já foram extraídos do App principal.
 
 O projeto usa POO principalmente no backend/domínio e composição funcional no React. Herança é usada apenas onde existe relação de subtipo clara; composição e injeção de dependências são preferidas para evitar acoplamento.
 
@@ -211,6 +211,7 @@ A evolução do ZEUS segue estes critérios:
 - composição sobre herança: classes são combinadas por dependências explícitas;
 - React funcional: componentes React não são convertidos em classes apenas para “usar POO”;
 - organização por feature: páginas/painéis complexos vivem em módulos próprios e recebem estado/callbacks explicitamente por props;
+- App.tsx atua progressivamente como controlador de estado, carregamento e navegação, enquanto a apresentação fica nas features;
 - refatorações estruturais só entram na `main` depois de testes de API, build, smoke e PostgreSQL.
 
 ## Beta gratuito na nuvem

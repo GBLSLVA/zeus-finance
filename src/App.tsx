@@ -1,13 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from './api'
 import { Icon } from './components/Icon'
-import { MetricCard } from './components/MetricCard'
-import { ZeusAssistantPanel } from './features/assistant/ZeusAssistantPanel'
-import { ZeusInsightsPanel } from './features/insights/ZeusInsightsPanel'
 import { RecurringExpensesPage } from './features/recurring/RecurringExpensesPage'
+import { BudgetPage } from './features/budgets/BudgetPage'
+import { DebtPage } from './features/debts/DebtPage'
+import { OverviewPage } from './features/overview/OverviewPage'
 import {
   categories,
-  categoryColor,
   descriptions,
   emptyDashboard,
   titles,
@@ -35,7 +34,6 @@ import {
   formatMonth,
   money,
   percent,
-  progressPercent,
   shiftMonthKey,
 } from './utils/finance'
 
@@ -920,321 +918,22 @@ export function App() {
         {error && <p role="alert" className="alert alert--error">{error}</p>}
 
         {view === 'overview' ? (
-          <div className="dashboard">
-            <section className="dashboard-hero">
-              <div className="dashboard-hero__main">
-                <div className="hero-icon"><Icon name="income" size={22} /></div>
-                <div>
-                  <span>Receita total do período</span>
-                  <strong>{money(dashboard.income)}</strong>
-                  <p>{dashboard.income > 0 ? `Salário + ${dashboard.monthlyExtras.length} receita${dashboard.monthlyExtras.length === 1 ? '' : 's'} extra${dashboard.monthlyExtras.length === 1 ? '' : 's'} em ${monthLabel.toLowerCase()}` : 'Cadastre seu salário e suas receitas extras'}</p>
-                </div>
-              </div>
-              <div className="dashboard-hero__aside">
-                <div>
-                  <span>Salário mensal</span>
-                  <strong>{money(dashboard.salary)}</strong>
-                </div>
-                <div>
-                  <span>Extras do período</span>
-                  <strong>{money(dashboard.extras)}</strong>
-                </div>
-              </div>
-            </section>
-
-            <section className="metrics-grid" aria-label="Resumo financeiro">
-              <MetricCard
-                label="Saldo após gastos"
-                value={money(dashboard.balance)}
-                detail={dashboard.income > 0 ? `${percent((dashboard.spent / dashboard.income) * 100)} da renda já foi consumida por gastos` : 'Cadastre uma receita para calcular o saldo'}
-                icon="income"
-                tone={dashboard.balance >= 0 ? 'accent' : 'warning'}
-              />
-              <MetricCard
-                label="Gastos no período"
-                value={money(dashboard.spent)}
-                detail={dashboard.monthly.length ? `${dashboard.monthly.length} lançamento${dashboard.monthly.length === 1 ? '' : 's'} registrado${dashboard.monthly.length === 1 ? '' : 's'}` : 'Nenhum gasto no mês'}
-                icon="wallet"
-              />
-              <MetricCard
-                label="Saldo projetado"
-                value={money(dashboard.projectedBalance)}
-                detail={dashboard.recurringTotal > 0 ? `${money(dashboard.recurringTotal)} em compromissos recorrentes neste mês` : 'Sem compromissos recorrentes ativos no mês'}
-                icon="budget"
-                tone={dashboard.projectedBalance >= 0 ? 'accent' : 'warning'}
-              />
-              <MetricCard
-                label="Dívida total"
-                value={money(dashboard.debt)}
-                detail={dashboard.debt > 0 && dashboard.income > 0 ? `Equivale a ${dashboard.debtMonths.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mês(es) da renda atual` : data.debts.length ? `${data.debts.length} dívida${data.debts.length === 1 ? '' : 's'} cadastrada${data.debts.length === 1 ? '' : 's'}` : 'Nenhuma dívida cadastrada'}
-                icon="debt"
-                tone="warning"
-              />
-            </section>
-
-            <ZeusAssistantPanel
-              monthLabel={monthLabel}
-              answer={assistantAnswer}
-              question={assistantQuestion}
-              busy={assistantBusy}
-              onQuestionChange={setAssistantQuestion}
-              onSubmit={askZeus}
-              onSuggestion={suggestion => {
-                setAssistantQuestion(suggestion)
-                void askZeusQuestion(suggestion)
-              }}
-            />
-
-            <ZeusInsightsPanel
-              monthLabel={monthLabel}
-              summary={monthlySummary}
-              insights={insights}
-            />
-
-            <section className="dashboard-grid">
-              <article className="panel spending-panel">
-                <div className="panel__header">
-                  <div>
-                    <span className="panel__eyebrow">DISTRIBUIÇÃO</span>
-                    <h2>Gastos por categoria</h2>
-                  </div>
-                  <span className="period-chip"><Icon name="calendar" size={15} /> {monthLabel}</span>
-                </div>
-
-                {dashboard.spent === 0 ? (
-                  <div className="empty-block">
-                    <div className="empty-block__icon"><Icon name="wallet" size={23} /></div>
-                    <h3>Ainda não há gastos neste mês.</h3>
-                    <p>Adicione o primeiro lançamento para visualizar a distribuição por categoria.</p>
-                    <button className="secondary-button" onClick={() => navigate('transactions')}>
-                      Registrar gasto
-                    </button>
-                  </div>
-                ) : (
-                  <div className="spending-layout">
-                    <div
-                      className="donut"
-                      role="img"
-                      style={{
-                        background: `conic-gradient(${dashboard.categoriesData.map((item, index, items) => {
-                          const start = items.slice(0, index).reduce((sum, current) => sum + current.share, 0)
-                          const end = start + item.share
-                          return `${categoryColor[item.category]} ${start}% ${end}%`
-                        }).join(', ')})`,
-                      }}
-                      aria-label="Distribuição de gastos por categoria"
-                    >
-                      <div className="donut__center">
-                        <span>Total</span>
-                        <strong>{money(dashboard.spent)}</strong>
-                      </div>
-                    </div>
-
-                    <div className="category-list">
-                      {dashboard.categoriesData
-                        .sort((a, b) => b.total - a.total)
-                        .map(item => (
-                          <div className="category-row" key={item.category}>
-                            <span className="category-dot" style={{ background: categoryColor[item.category] }} />
-                            <div className="category-row__name">
-                              <strong>{item.category}</strong>
-                              <span>{percent(item.share)} do total</span>
-                            </div>
-                            <strong className="category-row__value">{money(item.total)}</strong>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-              </article>
-
-              <article className="panel budget-panel">
-                <div className="panel__header">
-                  <div>
-                    <span className="panel__eyebrow">PLANEJAMENTO</span>
-                    <h2>Orçamento mensal</h2>
-                  </div>
-                  <button className="link-button" onClick={() => navigate('budgets')}>
-                    Ajustar limites <Icon name="arrow" size={16} />
-                  </button>
-                </div>
-
-                {dashboard.budgetTotal > 0 ? (
-                  <div className="budget-overview">
-                    <div className="budget-overview__summary">
-                      <div>
-                        <span>Limites definidos</span>
-                        <strong>{money(dashboard.budgetTotal)}</strong>
-                      </div>
-                      <div>
-                        <span>Gasto nas categorias orçadas</span>
-                        <strong>{money(dashboard.budgetedSpent)}</strong>
-                      </div>
-                      <div>
-                        <span>Disponível</span>
-                        <strong className={dashboard.budgetRemaining < 0 ? 'negative-value' : ''}>{money(dashboard.budgetRemaining)}</strong>
-                      </div>
-                    </div>
-                    <div className="progress-track budget-total-progress">
-                      <span style={{ width: progressPercent(dashboard.budgetUsage) }} />
-                    </div>
-                    <div className="budget-overview__footer">
-                      <span>{percent(dashboard.budgetUsage)} dos limites consumidos</span>
-                      {dashboard.budgetRemaining < 0 && <strong>Excedido em {money(Math.abs(dashboard.budgetRemaining))}</strong>}
-                    </div>
-
-                    <div className="budget-mini-list">
-                      {dashboard.budgetData.filter(item => item.limit > 0).map(item => (
-                        <div className="budget-mini-row" key={item.category}>
-                          <span className="category-dot" style={{ background: categoryColor[item.category] }} />
-                          <div>
-                            <strong>{item.category}</strong>
-                            <span>{money(item.spent)} de {money(item.limit)}</span>
-                          </div>
-                          <strong className={item.remaining < 0 ? 'negative-value' : ''}>{percent(item.usage)}</strong>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mini-empty mini-empty--tall">
-                    <div className="empty-block__icon"><Icon name="budget" size={21} /></div>
-                    <strong>Nenhum limite definido para {monthLabel.toLowerCase()}.</strong>
-                    <span>Defina quanto pretende gastar em cada categoria.</span>
-                    <button className="secondary-button" onClick={() => navigate('budgets')}>Criar orçamento</button>
-                  </div>
-                )}
-              </article>
-
-              <article className="panel debt-panel">
-                <div className="panel__header">
-                  <div>
-                    <span className="panel__eyebrow">COMPROMISSOS</span>
-                    <h2>Dívidas</h2>
-                  </div>
-                  <button className="link-button" onClick={() => navigate('debts')}>
-                    Gerenciar <Icon name="arrow" size={16} />
-                  </button>
-                </div>
-
-                <div className="compact-list">
-                  {(data.debts as Debt[]).filter(entry => entry.status === 'active').slice(0, 4).map(entry => (
-                    <div className="compact-row" key={entry.id}>
-                      <span className="compact-row__icon compact-row__icon--debt"><Icon name="debt" size={17} /></span>
-                      <div>
-                        <strong>{entry.name}</strong>
-                        <span>{entry.installmentsTotal > 0 ? `${entry.installmentsPaid}/${entry.installmentsTotal} parcelas` : `${percent(entry.originalAmount > 0 ? (entry.paidAmount / entry.originalAmount) * 100 : 0)} quitado`}</span>
-                      </div>
-                      <strong className="compact-row__value">{money(entry.currentBalance)}</strong>
-                    </div>
-                  ))}
-                  {!(data.debts as Debt[]).some(entry => entry.status === 'active') && (
-                    <div className="mini-empty">
-                      <span>Nenhuma dívida ativa.</span>
-                      <button className="link-button" onClick={() => navigate('debts')}>Adicionar dívida</button>
-                    </div>
-                  )}
-                </div>
-
-                {data.debts.length > 0 && (
-                  <div className="panel-total">
-                    <span>Saldo devedor • {percent(dashboard.debtProgress)} já quitado</span>
-                    <strong>{money(dashboard.debt)}</strong>
-                  </div>
-                )}
-              </article>
-
-              <article className="panel goals-panel">
-                <div className="panel__header">
-                  <div>
-                    <span className="panel__eyebrow">PROGRESSO</span>
-                    <h2>Metas</h2>
-                  </div>
-                  <button className="link-button" onClick={() => navigate('goals')}>
-                    Ver metas <Icon name="arrow" size={16} />
-                  </button>
-                </div>
-
-                {data.goals.length ? (
-                  <div className="goal-overview">
-                    <div className="goal-overview__summary">
-                      <div>
-                        <span>Reservado</span>
-                        <strong>{money(dashboard.saved)}</strong>
-                      </div>
-                      <strong className="goal-overview__percent">{percent(dashboard.goalProgress)}</strong>
-                    </div>
-                    <div className="progress-track">
-                      <span style={{ width: progressPercent(dashboard.goalProgress) }} />
-                    </div>
-                    <div className="goal-overview__footer">
-                      <span>Objetivo total</span>
-                      <strong>{money(dashboard.targets)}</strong>
-                    </div>
-
-                    <div className="goal-preview-list">
-                      {data.goals.slice(0, 3).map(goal => {
-                        const progress = goal.target > 0 ? (goal.saved / goal.target) * 100 : 0
-                        return (
-                          <div className="goal-preview" key={goal.id}>
-                            <div>
-                              <strong>{goal.name}</strong>
-                              <span>{money(goal.saved)} de {money(goal.target)}</span>
-                            </div>
-                            <span className="goal-preview__percent">{percent(progress)}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mini-empty mini-empty--tall">
-                    <div className="empty-block__icon"><Icon name="goal" size={21} /></div>
-                    <strong>Defina seu próximo objetivo.</strong>
-                    <span>Crie uma meta e acompanhe quanto já foi reservado.</span>
-                    <button className="secondary-button" onClick={() => navigate('goals')}>Criar meta</button>
-                  </div>
-                )}
-              </article>
-            </section>
-            <section className="panel history-panel">
-              <div className="panel__header">
-                <div>
-                  <span className="panel__eyebrow">HISTÓRICO</span>
-                  <h2>Últimos 6 meses até {monthLabel.toLowerCase()}</h2>
-                </div>
-                <span className="period-chip"><Icon name="calendar" size={15} /> 6 meses</span>
-              </div>
-              <div className="history-list">
-                {historyData.map(item => (
-                  <div className="history-row" key={item.monthKey}>
-                    <div className="history-row__month">
-                      <strong>{formatMonth(item.monthKey).split(' de ')[0]}</strong>
-                      <span>{item.monthKey.slice(0, 4)}</span>
-                    </div>
-                    <div className="history-bars">
-                      <div className="history-bar history-bar--income" title={`Receitas: ${money(item.income)}`}>
-                        <span style={{ width: `${(item.income / historyMax) * 100}%` }} />
-                      </div>
-                      <div className="history-bar history-bar--expense" title={`Gastos: ${money(item.expenses)}`}>
-                        <span style={{ width: `${(item.expenses / historyMax) * 100}%` }} />
-                      </div>
-                    </div>
-                    <div className="history-row__values">
-                      <span>{money(item.income)} entrada</span>
-                      <span>{money(item.expenses)} saída</span>
-                    </div>
-                    <strong className={item.balance < 0 ? 'negative-value' : 'positive-value'}>{money(item.balance)}</strong>
-                  </div>
-                ))}
-              </div>
-              <div className="history-legend">
-                <span><i className="history-legend__income" /> Receitas</span>
-                <span><i className="history-legend__expense" /> Gastos</span>
-                <span>Valor à direita = saldo do mês</span>
-              </div>
-            </section>
-          </div>
+          <OverviewPage
+            dashboard={dashboard}
+            data={data}
+            monthLabel={monthLabel}
+            assistantAnswer={assistantAnswer}
+            assistantQuestion={assistantQuestion}
+            assistantBusy={assistantBusy}
+            setAssistantQuestion={setAssistantQuestion}
+            askZeus={askZeus}
+            askZeusQuestion={askZeusQuestion}
+            monthlySummary={monthlySummary}
+            insights={insights}
+            historyData={historyData}
+            historyMax={historyMax}
+            navigate={navigate}
+          />
         ) : view === 'recurring' ? (
           <RecurringExpensesPage
             dashboard={dashboard}
@@ -1256,210 +955,34 @@ export function App() {
             }}
           />
         ) : view === 'budgets' ? (
-          <div className="budget-page">
-            <section className="budget-summary-grid">
-              <MetricCard
-                label="Orçamento definido"
-                value={money(dashboard.budgetTotal)}
-                detail={dashboard.budgetTotal > 0 ? `${budgets.length} categoria${budgets.length === 1 ? '' : 's'} com limite` : 'Nenhum limite definido neste mês'}
-                icon="budget"
-              />
-              <MetricCard
-                label="Consumido"
-                value={money(dashboard.budgetedSpent)}
-                detail={dashboard.budgetTotal > 0 ? `${percent(dashboard.budgetUsage)} dos limites definidos` : 'Defina limites para acompanhar o uso'}
-                icon="wallet"
-                tone={dashboard.budgetUsage > 100 ? 'warning' : 'default'}
-              />
-              <MetricCard
-                label="Disponível"
-                value={money(dashboard.budgetRemaining)}
-                detail={dashboard.budgetRemaining < 0 ? `Orçamento excedido em ${money(Math.abs(dashboard.budgetRemaining))}` : 'Quanto ainda resta nas categorias orçadas'}
-                icon="income"
-                tone={dashboard.budgetRemaining < 0 ? 'warning' : 'accent'}
-              />
-            </section>
-
-            <section className="budget-category-grid">
-              {dashboard.budgetData.map(item => (
-                <article className={`panel budget-category-card ${item.remaining < 0 ? 'budget-category-card--over' : ''}`} key={item.category}>
-                  <div className="budget-category-card__header">
-                    <div>
-                      <span className="category-dot" style={{ background: categoryColor[item.category] }} />
-                      <div>
-                        <strong>{item.category}</strong>
-                        <span>{item.budget ? 'Limite configurado' : 'Sem limite para este mês'}</span>
-                      </div>
-                    </div>
-                    {item.budget && <button className="icon-action icon-action--danger" onClick={() => removeBudget(item.budget!.id)} aria-label={`Remover orçamento de ${item.category}`}><Icon name="trash" size={16} /></button>}
-                  </div>
-
-                  <div className="budget-category-card__numbers">
-                    <div><span>Gasto</span><strong>{money(item.spent)}</strong></div>
-                    <div><span>Limite</span><strong>{item.limit > 0 ? money(item.limit) : '—'}</strong></div>
-                    <div><span>Restante</span><strong className={item.remaining < 0 ? 'negative-value' : ''}>{item.limit > 0 ? money(item.remaining) : '—'}</strong></div>
-                  </div>
-
-                  <div className="progress-track budget-category-progress">
-                    <span style={{ width: item.limit > 0 ? progressPercent(item.usage) : '0%' }} />
-                  </div>
-                  <div className="budget-category-card__usage">
-                    <span>{item.limit > 0 ? `${percent(item.usage)} utilizado` : 'Defina um limite abaixo'}</span>
-                    {item.remaining < 0 && <strong>Excedido</strong>}
-                  </div>
-
-                  <form className="budget-inline-form" onSubmit={event => saveBudget(event, item.category)}>
-                    <label>
-                      <span>Limite para {monthLabel.toLowerCase()}</span>
-                      <div className="money-input">
-                        <span>R$</span>
-                        <input name="limit" type="number" min="0.01" max="100000000" step="0.01" defaultValue={item.limit || undefined} placeholder="0,00" required />
-                      </div>
-                    </label>
-                    <button className="primary" disabled={busy}>{item.budget ? 'Atualizar' : 'Definir limite'}</button>
-                  </form>
-                </article>
-              ))}
-            </section>
-          </div>
+          <BudgetPage
+            dashboard={dashboard}
+            budgets={budgets}
+            monthLabel={monthLabel}
+            busy={busy}
+            onSave={saveBudget}
+            onRemove={id => { void removeBudget(id) }}
+          />
         ) : view === 'debts' ? (
-          <div className="debt-page">
-            <section className="debt-summary-grid" aria-label="Resumo das dívidas">
-              <article className="metric-card metric-card--warning">
-                <div className="metric-card__top"><span className="metric-card__label">Saldo devedor atual</span><span className="metric-card__icon"><Icon name="debt" size={18} /></span></div>
-                <strong>{money(dashboard.debt)}</strong>
-                <span className="metric-card__detail">{(data.debts as Debt[]).filter(debt => debt.status === 'active').length} dívida(s) ativa(s)</span>
-              </article>
-              <article className="metric-card">
-                <div className="metric-card__top"><span className="metric-card__label">Valor original</span><span className="metric-card__icon"><Icon name="debt" size={18} /></span></div>
-                <strong>{money(dashboard.debtOriginal)}</strong>
-                <span className="metric-card__detail">Soma dos valores originais cadastrados</span>
-              </article>
-              <article className="metric-card metric-card--accent">
-                <div className="metric-card__top"><span className="metric-card__label">Total já pago</span><span className="metric-card__icon"><Icon name="income" size={18} /></span></div>
-                <strong>{money(dashboard.debtPaid)}</strong>
-                <span className="metric-card__detail">{percent(dashboard.debtProgress)} das dívidas já foi quitado</span>
-              </article>
-            </section>
-
-            <div className="records-layout debt-records-layout">
-              <section className="panel records-panel debt-records-panel">
-                <div className="panel__header records-panel__header">
-                  <div>
-                    <span className="panel__eyebrow">COMPROMISSOS</span>
-                    <h2>Dívidas cadastradas</h2>
-                  </div>
-                  <span className="records-count">{data.debts.length} {data.debts.length === 1 ? 'item' : 'itens'}</span>
-                </div>
-
-                <div className="debt-card-list">
-                  {(data.debts as Debt[]).map(debt => {
-                    const progress = debt.originalAmount > 0 ? (debt.paidAmount / debt.originalAmount) * 100 : 0
-                    return (
-                      <article className={`debt-card ${debt.status === 'paid' ? 'debt-card--paid' : ''}`} key={debt.id}>
-                        <div className="debt-card__header">
-                          <div className="record-name">
-                            <span className="record-icon record-icon--debts"><Icon name="debt" size={17} /></span>
-                            <div>
-                              <strong>{debt.name}</strong>
-                              <span>{debt.creditor || 'Credor não informado'}{debt.dueDay ? ` • vence dia ${debt.dueDay}` : ''}</span>
-                            </div>
-                          </div>
-                          <span className={`debt-status debt-status--${debt.status}`}>{debt.status === 'paid' ? 'Quitada' : 'Ativa'}</span>
-                        </div>
-
-                        <div className="debt-card__values">
-                          <div><span>Original</span><strong>{money(debt.originalAmount)}</strong></div>
-                          <div><span>Já pago</span><strong>{money(debt.paidAmount)}</strong></div>
-                          <div><span>Saldo atual</span><strong>{money(debt.currentBalance)}</strong></div>
-                        </div>
-
-                        <div className="progress-track debt-progress"><span style={{ width: progressPercent(progress) }} /></div>
-
-                        <div className="debt-card__meta">
-                          <span>{percent(progress)} quitado</span>
-                          <span>{debt.installmentsTotal > 0 ? `${debt.installmentsPaid}/${debt.installmentsTotal} parcelas` : 'Sem parcelamento informado'}</span>
-                          <span>{debt.interestRate > 0 ? `Juros: ${debt.interestRate.toLocaleString('pt-BR')}% a.m.` : 'Juros não informados'}</span>
-                        </div>
-
-                        <div className="debt-card__actions">
-                          <button className="secondary-button" onClick={() => openDebtPayments(debt.id)}>Pagamentos</button>
-                          <button className="icon-action" onClick={() => startEdit('debts', debt)} aria-label={`Editar ${debt.name}`}><Icon name="edit" size={17} /></button>
-                          <button className="icon-action icon-action--danger" onClick={() => remove('debts', debt.id)} aria-label={`Excluir ${debt.name}`}><Icon name="trash" size={17} /></button>
-                        </div>
-                      </article>
-                    )
-                  })}
-                  {!data.debts.length && (
-                    <div className="table-empty debt-empty">
-                      <div className="empty-block__icon"><Icon name="debt" size={22} /></div>
-                      <strong>Nenhuma dívida cadastrada.</strong>
-                      <span>Use o formulário ao lado para registrar seu primeiro compromisso.</span>
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              <aside className="panel record-form-panel">
-                <span className="panel__eyebrow">{editing?.kind === 'debts' ? 'EDITAR DÍVIDA' : 'NOVA DÍVIDA'}</span>
-                <h2>{editing?.kind === 'debts' ? 'Atualizar dívida' : 'Adicionar dívida'}</h2>
-                <p>Informe o valor original. O saldo atual será calculado automaticamente a partir dos pagamentos registrados.</p>
-                <form key={`debt-${editing?.kind === 'debts' ? editing.entry.id : 'new'}`} onSubmit={save}>
-                  <label><span>Descrição</span><input name="name" defaultValue={editing?.kind === 'debts' ? editing.entry.name : ''} placeholder="Ex.: Cartão, empréstimo, financiamento" required maxLength={120} /></label>
-                  <label><span>Credor</span><input name="creditor" defaultValue={editing?.kind === 'debts' ? (editing.entry as Debt).creditor : ''} placeholder="Ex.: Banco, loja, pessoa" maxLength={120} /></label>
-                  <label><span>Valor original</span><div className="money-input"><span>R$</span><input name="originalAmount" type="number" min="0.01" max="100000000" step="0.01" defaultValue={editing?.kind === 'debts' ? (editing.entry as Debt).originalAmount : undefined} placeholder="0,00" required /></div></label>
-                  <div className="form-grid-2">
-                    <label><span>Juros ao mês (%)</span><input name="interestRate" type="number" min="0" max="100" step="0.01" defaultValue={editing?.kind === 'debts' ? (editing.entry as Debt).interestRate : 0} /></label>
-                    <label><span>Dia de vencimento</span><input name="dueDay" type="number" min="1" max="31" defaultValue={editing?.kind === 'debts' ? (editing.entry as Debt).dueDay ?? undefined : undefined} placeholder="10" /></label>
-                  </div>
-                  <label><span>Total de parcelas</span><input name="installmentsTotal" type="number" min="0" max="600" step="1" defaultValue={editing?.kind === 'debts' ? (editing.entry as Debt).installmentsTotal : 0} /></label>
-                  <div className="form-actions">
-                    <button className="primary primary--full" disabled={busy}>{busy ? 'Salvando…' : editing?.kind === 'debts' ? 'Atualizar dívida' : 'Salvar dívida'}{!busy && <Icon name="arrow" size={17} />}</button>
-                    {editing?.kind === 'debts' && <button type="button" className="secondary-button" onClick={cancelEdit}>Cancelar edição</button>}
-                  </div>
-                </form>
-              </aside>
-            </div>
-
-            {selectedDebtId && (() => {
-              const debt = (data.debts as Debt[]).find(item => item.id === selectedDebtId)
-              if (!debt) return null
-              return (
-                <section className="panel payments-panel">
-                  <div className="panel__header">
-                    <div>
-                      <span className="panel__eyebrow">HISTÓRICO DE PAGAMENTOS</span>
-                      <h2>{debt.name}</h2>
-                    </div>
-                    <button className="link-button" onClick={() => { setSelectedDebtId(null); setDebtPayments([]) }}>Fechar</button>
-                  </div>
-
-                  <div className="payments-layout">
-                    <form className="payment-form" onSubmit={addDebtPayment}>
-                      <label><span>Valor pago</span><div className="money-input"><span>R$</span><input name="amount" type="number" min="0.01" max={debt.currentBalance} step="0.01" placeholder="0,00" required /></div></label>
-                      <label><span>Data do pagamento</span><input name="paymentDate" type="date" defaultValue={currentDateKey()} required /></label>
-                      <label><span>Observação</span><input name="note" placeholder="Ex.: Parcela de setembro" maxLength={240} /></label>
-                      <label className="check-field"><input name="countsAsInstallment" type="checkbox" defaultChecked /><span>Contar como parcela paga</span></label>
-                      <button className="primary primary--full" disabled={busy || debt.currentBalance <= 0}>{debt.currentBalance <= 0 ? 'Dívida quitada' : busy ? 'Salvando…' : 'Registrar pagamento'}</button>
-                    </form>
-
-                    <div className="payment-history">
-                      {debtPayments.map(payment => (
-                        <div className="payment-row" key={payment.id}>
-                          <div>
-                            <strong>{money(payment.amount)}</strong>
-                            <span>{new Date(payment.paymentDate + 'T12:00:00').toLocaleDateString('pt-BR')}{payment.note ? ` • ${payment.note}` : ''}</span>
-                          </div>
-                          <button className="icon-action icon-action--danger" onClick={() => removeDebtPayment(payment.id)} aria-label="Excluir pagamento"><Icon name="trash" size={16} /></button>
-                        </div>
-                      ))}
-                      {!debtPayments.length && <div className="mini-empty"><span>Nenhum pagamento registrado para esta dívida.</span></div>}
-                    </div>
-                  </div>
-                </section>
-              )
-            })()}
-          </div>
+          <DebtPage
+            dashboard={dashboard}
+            debts={data.debts as Debt[]}
+            debtPayments={debtPayments}
+            editing={editing}
+            selectedDebtId={selectedDebtId}
+            busy={busy}
+            onSave={save}
+            onEdit={debt => startEdit('debts', debt)}
+            onRemove={id => { void remove('debts', id) }}
+            onCancelEdit={cancelEdit}
+            onOpenPayments={id => { void openDebtPayments(id) }}
+            onClosePayments={() => {
+              setSelectedDebtId(null)
+              setDebtPayments([])
+            }}
+            onAddPayment={addDebtPayment}
+            onRemovePayment={id => { void removeDebtPayment(id) }}
+          />
         ) : view === 'incomes' ? (
           <div className="records-layout">
             <section className="panel records-panel">
