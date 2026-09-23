@@ -9,6 +9,7 @@ Versão em evolução para **ZEUS 1.1**.
 Funcionalidades principais:
 
 - Cadastro, login e logout com sessão por cookie.
+- Troca de senha exigindo a senha atual, com encerramento automático das outras sessões.
 - Cadastro, edição, listagem e exclusão de gastos, dívidas, metas e receitas.
 - Salários recorrentes com período de vigência e status ativo/inativo.
 - Rendas extras por data de recebimento.
@@ -160,7 +161,7 @@ Responsabilidades:
 - **ApiClient:** chamadas HTTP da interface.
 - **FinanceApi:** autenticação, roteamento, validação de origem e respostas HTTP.
 - **FinanceRepository:** regras de persistência de registros e receitas.
-- **AuthService:** login, sessões e proteção contra tentativas excessivas.
+- **AuthService:** cadastro, login, troca de senha, sessões e proteção contra tentativas excessivas.
 - **SqliteDatabase:** conexão SQLite, queries e migrations.
 
 Valores financeiros são armazenados em centavos inteiros.
