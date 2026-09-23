@@ -223,6 +223,40 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal((await call('budgets?month=2026-13','GET',undefined,first.cookie)).status,400);
     assert.equal((await call('budgets','POST',{month:'2026-09',category:'Inválida',limit:100},first.cookie)).status,400);
 
+    const recurringInternet = await call('recurring-expenses','POST',{
+      name:'Internet',
+      category:'Casa',
+      value:120,
+      dueDay:31,
+      activeFrom:'2026-01-01',
+      activeUntil:null,
+      active:true,
+    },first.cookie);
+    assert.equal(recurringInternet.status,201);
+    assert.equal(recurringInternet.data.name,'Internet');
+    assert.equal(recurringInternet.data.value,120);
+    assert.equal(recurringInternet.data.dueDay,31);
+    assert.equal(recurringInternet.data.active,true);
+
+    assert.equal((await call('recurring-expenses','POST',{
+      name:'Inválido',
+      category:'Inválida',
+      value:10,
+      dueDay:10,
+      activeFrom:'2026-01-01',
+    },first.cookie)).status,400);
+    assert.equal((await call('recurring-expenses','POST',{
+      name:'Dia inválido',
+      category:'Casa',
+      value:10,
+      dueDay:32,
+      activeFrom:'2026-01-01',
+    },first.cookie)).status,400);
+
+    const recurringList = await call('recurring-expenses','GET',undefined,first.cookie);
+    assert.equal(recurringList.status,200);
+    assert.equal(recurringList.data.length,1);
+
     const insights = await call('insights?month=2026-09','GET',undefined,first.cookie);
     assert.equal(insights.status,200);
     assert.equal(insights.data.month,'2026-09');
@@ -245,6 +279,11 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal(dashboard.data.extras,450);
     assert.equal(dashboard.data.income,1650);
     assert.equal(dashboard.data.balance,1630);
+    assert.equal(dashboard.data.recurringTotal,120);
+    assert.equal(dashboard.data.projectedSpent,140);
+    assert.equal(dashboard.data.projectedBalance,1510);
+    assert.equal(dashboard.data.recurringExpenses.length,1);
+    assert.equal(dashboard.data.recurringExpenses[0].scheduledDate,'2026-09-30');
     assert.equal(dashboard.data.debt,1100);
     assert.equal(dashboard.data.debtOriginal,1300);
     assert.equal(dashboard.data.debtPaid,200);
@@ -256,6 +295,11 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal(dashboard.data.historyData.length,6);
     assert.equal(dashboard.data.historyData.at(-1).monthKey,'2026-09');
     assert.equal((await call('dashboard?month=2026-13','GET',undefined,first.cookie)).status,400);
+
+    const februaryDashboard = await call('dashboard?month=2026-02','GET',undefined,first.cookie);
+    assert.equal(februaryDashboard.status,200);
+    assert.equal(februaryDashboard.data.recurringTotal,120);
+    assert.equal(februaryDashboard.data.recurringExpenses[0].scheduledDate,'2026-02-28');
 
     const assistantExpenses = await call('assistant','POST',{
       month:'2026-09',
@@ -289,6 +333,7 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
 
     const second = await call('register','POST',{email:'b@example.com',password:'secure-password-456'});
     assert.deepEqual((await call('transactions','GET',undefined,second.cookie)).data,[]);
+    assert.deepEqual((await call('recurring-expenses','GET',undefined,second.cookie)).data,[]);
 
     const secondEntry = await call('transactions','POST',{
       name:'Registro exclusivo do segundo usuário',
@@ -312,6 +357,8 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal(secondDashboard.data.debt,0);
     assert.equal(secondDashboard.data.saved,0);
     assert.equal(secondDashboard.data.income,0);
+    assert.equal(secondDashboard.data.recurringTotal,0);
+    assert.equal(secondDashboard.data.projectedSpent,77);
 
     const secondAssistant = await call('assistant','POST',{
       month:'2026-09',
@@ -342,6 +389,8 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal(firstExport.data.debts.length,1);
     assert.equal(firstExport.data.debtPayments.length,1);
     assert.equal(firstExport.data.budgets.length,2);
+    assert.equal(firstExport.data.recurringExpenses.length,1);
+    assert.equal(firstExport.data.recurringExpenses[0].name,'Internet');
     assert.equal(JSON.stringify(firstExport.data).includes('Registro exclusivo do segundo usuário'),false);
 
     const secondExport = await call('export','GET',undefined,second.cookie);
@@ -349,6 +398,7 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal(secondExport.data.account.email,'b@example.com');
     assert.equal(secondExport.data.transactions.length,1);
     assert.equal(secondExport.data.transactions[0].name,'Registro exclusivo do segundo usuário');
+    assert.equal(secondExport.data.recurringExpenses.length,0);
     assert.equal(JSON.stringify(secondExport.data).includes('Mercado atualizado'),false);
 
     const disposable = await call('register','POST',{email:'delete-me@example.com',password:'delete-secure-password-123'});
@@ -388,6 +438,8 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal((await call(`debts/${debt.data.id}`,'DELETE',undefined,first.cookie)).status,200);
     assert.equal((await call(`budgets/${transportBudget.data.id}`,'DELETE',undefined,first.cookie)).status,200);
     assert.equal((await call('budgets?month=2026-09','GET',undefined,first.cookie)).data.length,1);
+    assert.equal((await call(`recurring-expenses/${recurringInternet.data.id}`,'DELETE',undefined,first.cookie)).status,200);
+    assert.equal((await call('recurring-expenses','GET',undefined,first.cookie)).data.length,0);
     assert.equal((await call(`incomes/${extra.data.id}`,'DELETE',undefined,first.cookie)).status,200);
 
     const alternateSession = await call('login','POST',{
@@ -574,6 +626,14 @@ test('Conta: exclusão remove dados próprios e preserva outro usuário', async 
       category:'Comida',
       limit:700,
     });
+    await repository.addRecurringExpense(owner.user.id,{
+      name:'Internet',
+      category:'Casa',
+      value:120,
+      dueDay:10,
+      activeFrom:'2026-01-01',
+      active:true,
+    });
 
     await repository.add(other.user.id,'transactions',{
       name:'Outro usuário',
@@ -592,7 +652,7 @@ test('Conta: exclusão remove dados próprios e preserva outro usuário', async 
       confirmation:'EXCLUIR',
     });
 
-    for (const table of ['sessions','entries','incomes','debts','debt_payments','budgets']) {
+    for (const table of ['sessions','entries','incomes','debts','debt_payments','budgets','recurring_expenses']) {
       const count = (await db.query(`SELECT COUNT(*) AS total FROM ${table} WHERE user_id=?`,[owner.user.id])).recordset[0].total;
       assert.equal(count,0,`${table} ainda possui dados do usuário excluído`);
     }
@@ -632,7 +692,7 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
   const migrated = new SqliteDatabase(path);
   try {
     const versions = migrated.db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(row => row.version);
-    assert.deepEqual(versions,[1,2,3,4,5,6]);
+    assert.deepEqual(versions,[1,2,3,4,5,6,7]);
 
     const entryColumns = migrated.db.prepare('PRAGMA table_info(entries)').all().map(row => row.name);
     assert.ok(entryColumns.includes('transaction_date'));
@@ -662,6 +722,11 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
     assert.ok(budgetColumns.includes('month'));
     assert.ok(budgetColumns.includes('category'));
     assert.ok(budgetColumns.includes('limit_amount'));
+
+    const recurringColumns = migrated.db.prepare('PRAGMA table_info(recurring_expenses)').all().map(row => row.name);
+    assert.ok(recurringColumns.includes('due_day'));
+    assert.ok(recurringColumns.includes('active_from'));
+    assert.ok(recurringColumns.includes('active_until'));
   } finally {
     await migrated.close();
     rmSync(dir,{recursive:true,force:true});
@@ -728,7 +793,7 @@ test('PostgreSQL: persiste cadastro e permite login após reconectar', {skip: !p
   await firstConnection.init();
   try {
     const versions = (await firstConnection.query('SELECT version FROM schema_migrations ORDER BY version')).recordset.map(row => row.version);
-    assert.deepEqual(versions,[1,2,3,4,5,6]);
+    assert.deepEqual(versions,[1,2,3,4,5,6,7]);
 
     const auth = new AuthService(new FinanceRepository(firstConnection));
     const registered = await auth.login({email,password},true,'postgres-register');
