@@ -175,10 +175,13 @@ Responsabilidades:
 
 - **ApiClient:** chamadas HTTP da interface.
 - **FinanceApi:** roteamento, validação de origem e respostas HTTP.
-- **FinanceRepository:** fachada das regras financeiras, preservando compatibilidade enquanto os domínios são extraídos gradualmente.
+- **FinanceRepository:** fachada/orquestrador financeiro; delega persistência aos repositories especializados e mantém cálculos agregados enquanto services são extraídos gradualmente.
 - **UserRepository:** persistência de usuários, credenciais e sessões.
+- **EntryRepository:** persistência e validação de gastos e metas.
+- **DebtRepository:** dívidas, pagamentos, recálculo de saldo e concorrência transacional.
 - **IncomeRepository:** persistência e validação de receitas recorrentes e extras.
 - **BudgetRepository:** persistência e validação de orçamentos mensais por categoria.
+- **RecurringExpenseRepository:** recorrências, vigência, pagamentos mensais e proteção contra duplicidade.
 - **AuthService:** regras de cadastro, login, troca de senha, sessões e proteção contra tentativas excessivas; não executa SQL diretamente.
 - **DatabaseAdapter:** contrato comum da camada de persistência.
 - **SqliteDatabase / PostgresDatabase:** implementações polimórficas do contrato de banco.

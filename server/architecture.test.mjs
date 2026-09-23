@@ -6,7 +6,10 @@ import { join } from 'node:path';
 import { DatabaseAdapter } from './database-adapter.mjs';
 import { SqliteDatabase, PostgresDatabase } from './database.mjs';
 import { BudgetRepository } from './repositories/budget-repository.mjs';
+import { DebtRepository } from './repositories/debt-repository.mjs';
+import { EntryRepository } from './repositories/entry-repository.mjs';
 import { IncomeRepository } from './repositories/income-repository.mjs';
+import { RecurringExpenseRepository } from './repositories/recurring-expense-repository.mjs';
 import { UserRepository } from './repositories/user-repository.mjs';
 import { AuthService, FinanceRepository } from './app.mjs';
 
@@ -24,7 +27,10 @@ test('Arquitetura: FinanceRepository compõe UserRepository e AuthService depend
   try {
     const finance = new FinanceRepository(db);
     assert.ok(finance.users instanceof UserRepository);
+    assert.ok(finance.entries instanceof EntryRepository);
+    assert.ok(finance.debts instanceof DebtRepository);
     assert.ok(finance.budgets instanceof BudgetRepository);
+    assert.ok(finance.recurring instanceof RecurringExpenseRepository);
     assert.ok(finance.incomes instanceof IncomeRepository);
 
     const auth = new AuthService(finance.users);
@@ -67,8 +73,27 @@ test('Arquitetura: repositories de domínio mantêm validação e persistência 
   try {
     const users = new UserRepository(db);
     const account = await users.create('repositories@example.com','hash');
+    const entries = new EntryRepository(db);
+    const debts = new DebtRepository(db);
     const budgets = new BudgetRepository(db);
+    const recurring = new RecurringExpenseRepository(db);
     const incomes = new IncomeRepository(db);
+
+    const transaction = await entries.add(account.id,'transactions',{
+      name:'Mercado',
+      category:'Comida',
+      value:80,
+      transactionDate:'2026-09-05',
+    });
+    assert.equal(transaction.value,80);
+
+    const debt = await debts.add(account.id,{
+      name:'Cartão',
+      originalAmount:500,
+      installmentsTotal:5,
+      dueDay:10,
+    });
+    assert.equal(debt.currentBalance,500);
 
     const budget = await budgets.upsert(account.id,{
       month:'2026-09',
@@ -76,6 +101,16 @@ test('Arquitetura: repositories de domínio mantêm validação e persistência 
       limit:900,
     });
     assert.equal(budget.limit,900);
+
+    const recurringExpense = await recurring.add(account.id,{
+      name:'Internet',
+      category:'Casa',
+      value:120,
+      dueDay:15,
+      activeFrom:'2026-09-01',
+      active:true,
+    });
+    assert.equal(recurringExpense.value,120);
 
     const income = await incomes.add(account.id,{
       name:'Salário',
