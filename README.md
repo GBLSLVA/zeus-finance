@@ -11,6 +11,7 @@ Funcionalidades principais:
 - Cadastro, login e logout com sessão por cookie.
 - Troca de senha exigindo a senha atual, com encerramento automático das outras sessões.
 - Exclusão segura da conta, com confirmação por senha e remoção transacional dos dados do usuário.
+- Exportação completa dos dados da conta em backup JSON isolado por usuário.
 - Cadastro, edição, listagem e exclusão de gastos, dívidas, metas e receitas.
 - Salários recorrentes com período de vigência e status ativo/inativo.
 - Rendas extras por data de recebimento.
@@ -186,7 +187,7 @@ Prioridades seguintes:
 - gastos recorrentes;
 - categorias personalizadas;
 - exportação CSV/PDF;
-- backup e restauração;
+- restauração de backup JSON;
 - PWA e deploy HTTPS.
 
 ## Autor

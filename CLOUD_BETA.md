@@ -116,7 +116,6 @@ O ZEUS não precisa dessas informações.
 
 - recuperação de senha por e-mail;
 - política de privacidade;
-- backup exportável;
 - logs estruturados;
 - migração de regras financeiras do frontend para endpoint de dashboard;
 - testes de integração PostgreSQL.

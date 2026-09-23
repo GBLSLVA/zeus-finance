@@ -120,7 +120,7 @@ const percent = (value: number) => `${Math.round(Math.max(0, Math.min(100, value
 const effectiveIncomeEnd = (entry: Income) =>
   entry.activeUntil ?? (!entry.active ? entry.updatedAt?.slice(0, 10) || entry.activeFrom : null)
 
-function Icon({ name, size = 20 }: { name: 'overview' | 'income' | 'budget' | 'wallet' | 'debt' | 'goal' | 'logout' | 'plus' | 'menu' | 'close' | 'arrow' | 'edit' | 'trash' | 'shield' | 'calendar'; size?: number }) {
+function Icon({ name, size = 20 }: { name: 'overview' | 'income' | 'budget' | 'wallet' | 'debt' | 'goal' | 'logout' | 'plus' | 'menu' | 'close' | 'arrow' | 'edit' | 'trash' | 'shield' | 'calendar' | 'download'; size?: number }) {
   const common = {
     width: size,
     height: size,
@@ -149,6 +149,7 @@ function Icon({ name, size = 20 }: { name: 'overview' | 'income' | 'budget' | 'w
     trash: <><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M7 7l1 13h8l1-13" /><path d="M10 11v5" /><path d="M14 11v5" /></>,
     shield: <><path d="M12 3 5 6v5c0 4.7 2.7 8 7 10 4.3-2 7-5.3 7-10V6l-7-3Z" /><path d="m9.5 12 1.7 1.7 3.6-4" /></>,
     calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M8 3v4" /><path d="M16 3v4" /><path d="M3 10h18" /></>,
+    download: <><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></>,
   }
 
   return <svg {...common}>{paths[name]}</svg>
@@ -199,6 +200,7 @@ export function App() {
   const [debtPayments, setDebtPayments] = useState<DebtPayment[]>([])
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey())
   const [budgets, setBudgets] = useState<Budget[]>([])
+  const [exportBusy, setExportBusy] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [passwordBusy, setPasswordBusy] = useState(false)
   const [passwordError, setPasswordError] = useState('')
@@ -316,6 +318,29 @@ export function App() {
       setNotice('')
     } catch (e) {
       setError((e as Error).message)
+    }
+  }
+
+  async function exportAccountData() {
+    setExportBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const payload = await api.request<Record<string, unknown>>('export')
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `zeus-finance-backup-${currentDateKey()}.json`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 0)
+      setNotice('Backup exportado com sucesso.')
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setExportBusy(false)
     }
   }
 
@@ -887,6 +912,10 @@ export function App() {
               <span>Conta ativa</span>
             </div>
           </div>
+          <button className="logout-button account-action-button" onClick={exportAccountData} disabled={exportBusy}>
+            <Icon name="download" size={18} />
+            {exportBusy ? 'Exportando…' : 'Exportar dados'}
+          </button>
           <button className="logout-button account-action-button" onClick={openPasswordDialog}>
             <Icon name="shield" size={18} />
             Alterar senha
@@ -942,6 +971,7 @@ export function App() {
           </div>
         )}
 
+        {notice && <p role="status" className="alert alert--success">{notice}</p>}
         {error && <p role="alert" className="alert alert--error">{error}</p>}
 
         {view === 'overview' ? (

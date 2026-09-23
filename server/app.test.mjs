@@ -196,6 +196,36 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     const second = await call('register','POST',{email:'b@example.com',password:'secure-password-456'});
     assert.deepEqual((await call('transactions','GET',undefined,second.cookie)).data,[]);
 
+    const secondEntry = await call('transactions','POST',{
+      name:'Registro exclusivo do segundo usuário',
+      category:'Casa',
+      value:77,
+      transactionDate:'2026-09-03',
+    },second.cookie);
+    assert.equal(secondEntry.status,201);
+
+    const firstExport = await call('export','GET',undefined,first.cookie);
+    assert.equal(firstExport.status,200);
+    assert.equal(firstExport.data.format,'zeus-finance-backup');
+    assert.equal(firstExport.data.version,1);
+    assert.equal(firstExport.data.account.email,'a@example.com');
+    assert.match(firstExport.data.exportedAt,/^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(firstExport.data.transactions.length,1);
+    assert.equal(firstExport.data.transactions[0].name,'Mercado atualizado');
+    assert.equal(firstExport.data.goals.length,1);
+    assert.equal(firstExport.data.incomes.length,3);
+    assert.equal(firstExport.data.debts.length,1);
+    assert.equal(firstExport.data.debtPayments.length,1);
+    assert.equal(firstExport.data.budgets.length,2);
+    assert.equal(JSON.stringify(firstExport.data).includes('Registro exclusivo do segundo usuário'),false);
+
+    const secondExport = await call('export','GET',undefined,second.cookie);
+    assert.equal(secondExport.status,200);
+    assert.equal(secondExport.data.account.email,'b@example.com');
+    assert.equal(secondExport.data.transactions.length,1);
+    assert.equal(secondExport.data.transactions[0].name,'Registro exclusivo do segundo usuário');
+    assert.equal(JSON.stringify(secondExport.data).includes('Mercado atualizado'),false);
+
     const disposable = await call('register','POST',{email:'delete-me@example.com',password:'delete-secure-password-123'});
     assert.equal(disposable.status,200);
     assert.equal((await call('delete-account','POST',{

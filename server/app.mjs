@@ -338,6 +338,45 @@ export class FinanceRepository {
     if (!result.rowsAffected[0]) throw new HttpError(404, 'Orçamento não encontrado.');
   }
 
+  async exportUserData(user) {
+    const account = (await this.db.query('SELECT id,email FROM users WHERE id=?', [user])).recordset[0];
+    if (!account) throw new HttpError(404, 'Conta não encontrada.');
+
+    const entries = (await this.db.query(
+      'SELECT * FROM entries WHERE user_id=? ORDER BY kind,COALESCE(transaction_date,substr(created_at,1,10)) DESC,id DESC',
+      [user],
+    )).recordset;
+    const incomes = (await this.db.query(
+      'SELECT * FROM incomes WHERE user_id=? ORDER BY COALESCE(active_from,substr(received_at,1,10)) DESC,id DESC',
+      [user],
+    )).recordset;
+    const debts = (await this.db.query(
+      'SELECT * FROM debts WHERE user_id=? ORDER BY id',
+      [user],
+    )).recordset;
+    const debtPayments = (await this.db.query(
+      'SELECT * FROM debt_payments WHERE user_id=? ORDER BY payment_date,id',
+      [user],
+    )).recordset;
+    const budgets = (await this.db.query(
+      'SELECT * FROM budgets WHERE user_id=? ORDER BY month,category,id',
+      [user],
+    )).recordset;
+
+    return {
+      format: 'zeus-finance-backup',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      account: {email:account.email},
+      transactions: entries.filter(row => row.kind === 'transactions').map(normalizeEntry),
+      goals: entries.filter(row => row.kind === 'goals').map(normalizeEntry),
+      incomes: incomes.map(normalizeIncome),
+      debts: debts.map(normalizeDebt),
+      debtPayments: debtPayments.map(normalizeDebtPayment),
+      budgets: budgets.map(normalizeBudget),
+    };
+  }
+
   async listIncomes(user) {
     const result = await this.db.query(
       'SELECT * FROM incomes WHERE user_id=? ORDER BY CASE type WHEN ? THEN 0 ELSE 1 END, COALESCE(active_from,substr(received_at,1,10)) DESC, id DESC',
@@ -617,6 +656,7 @@ export class FinanceApi {
 
       const user = await this.auth.authenticate(token);
       if (path === '/api/me' && req.method === 'GET') return send(200,(await this.repository.db.query('SELECT id,email FROM users WHERE id=?', [user])).recordset[0]);
+      if (path === '/api/export' && req.method === 'GET') return send(200,await this.repository.exportUserData(user));
       if (path === '/api/logout' && req.method === 'POST') {
         await this.auth.logout(token);
         return send(200,{}, {'Set-Cookie':`zeus_session=; HttpOnly; SameSite=Strict; Path=/api; Max-Age=0${secure}`});
