@@ -2673,7 +2673,7 @@ tbody tr:hover td {
 
 .budget-category-card__numbers span {
   color: var(--subtle);
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .budget-category-card__numbers strong {
