@@ -1074,8 +1074,19 @@ export class FinanceRepository {
   }
 
   async removeRecurringExpense(user, id) {
-    const result = await this.db.query('DELETE FROM recurring_expenses WHERE user_id=? AND id=?', [user,id]);
-    if (!result.rowsAffected[0]) throw new HttpError(404, 'Gasto recorrente não encontrado.');
+    await this.db.transaction(async database => {
+      const existing = (await database.query(
+        'SELECT id FROM recurring_expenses WHERE user_id=? AND id=?',
+        [user,id],
+      )).recordset[0];
+      if (!existing) throw new HttpError(404, 'Gasto recorrente não encontrado.');
+
+      await database.query(
+        'UPDATE entries SET recurring_expense_id=NULL,recurring_month=NULL WHERE user_id=? AND recurring_expense_id=?',
+        [user,id],
+      );
+      await database.query('DELETE FROM recurring_expenses WHERE user_id=? AND id=?', [user,id]);
+    });
   }
 
   async recordRecurringExpensePayment(user, id, data) {
