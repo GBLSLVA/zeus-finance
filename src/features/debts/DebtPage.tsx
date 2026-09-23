@@ -72,7 +72,6 @@ export function DebtPage({
         <section className="panel records-panel debt-records-panel">
           <div className="panel__header records-panel__header">
             <div>
-              <span className="panel__eyebrow">COMPROMISSOS</span>
               <h2>Dívidas cadastradas</h2>
             </div>
             <span className="records-count">{debts.length} {debts.length === 1 ? 'item' : 'itens'}</span>
@@ -127,7 +126,6 @@ export function DebtPage({
         </section>
 
         <aside className="panel record-form-panel">
-          <span className="panel__eyebrow">{editingDebt ? 'EDITAR DÍVIDA' : 'NOVA DÍVIDA'}</span>
           <h2>{editingDebt ? 'Atualizar dívida' : 'Adicionar dívida'}</h2>
           <p>Informe o valor original. O saldo atual será calculado automaticamente a partir dos pagamentos registrados.</p>
           <form key={`debt-${editingDebt?.id ?? 'new'}`} onSubmit={onSave}>
@@ -154,8 +152,7 @@ export function DebtPage({
         <section className="panel payments-panel">
           <div className="panel__header">
             <div>
-              <span className="panel__eyebrow">HISTÓRICO DE PAGAMENTOS</span>
-              <h2>{selectedDebt.name}</h2>
+              <h2>Pagamentos de {selectedDebt.name}</h2>
             </div>
             <button className="link-button" onClick={onClosePayments}>Fechar</button>
           </div>
