@@ -33,6 +33,11 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
   }
 
   try {
+    const health = await call('health');
+    assert.equal(health.status,200);
+    assert.equal(health.data.database,'sqlite');
+    assert.equal(health.data.persistent,false);
+
     assert.equal((await call('transactions')).status,401);
 
     const first = await call('register','POST',{email:'a@example.com',password:'secure-password-123'});
@@ -532,19 +537,29 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
 
 test('Produção: recusa SQLite sem DATABASE_URL para proteger persistência', async () => {
   const previousNodeEnv = process.env.NODE_ENV;
+  const previousRender = process.env.RENDER;
   const previousDatabaseUrl = process.env.DATABASE_URL;
   const previousAllowSqlite = process.env.ALLOW_SQLITE_PRODUCTION;
-  process.env.NODE_ENV = 'production';
   delete process.env.DATABASE_URL;
   delete process.env.ALLOW_SQLITE_PRODUCTION;
 
   try {
+    process.env.NODE_ENV = 'production';
+    delete process.env.RENDER;
+    await assert.rejects(
+      () => openDatabase({sqlitePath:':memory:'}),
+      /DATABASE_URL é obrigatório em produção/,
+    );
+
+    process.env.NODE_ENV = 'development';
+    process.env.RENDER = 'true';
     await assert.rejects(
       () => openDatabase({sqlitePath:':memory:'}),
       /DATABASE_URL é obrigatório em produção/,
     );
   } finally {
     if (previousNodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previousNodeEnv;
+    if (previousRender === undefined) delete process.env.RENDER; else process.env.RENDER = previousRender;
     if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = previousDatabaseUrl;
     if (previousAllowSqlite === undefined) delete process.env.ALLOW_SQLITE_PRODUCTION; else process.env.ALLOW_SQLITE_PRODUCTION = previousAllowSqlite;
   }
