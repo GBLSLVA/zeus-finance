@@ -205,6 +205,51 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
   }
 });
 
+test('Auth: login válido não acumula bloqueio e limite é isolado por e-mail', async () => {
+  const dir = mkdtempSync(join(tmpdir(),'zeus-auth-'));
+  const path = join(dir,'auth.sqlite');
+  const db = new SqliteDatabase(path);
+  const auth = new AuthService(new FinanceRepository(db));
+  auth.maxLoginFailures = 3;
+
+  try {
+    const password = 'secure-password-123';
+    await auth.login({email:'rate-a@example.com',password},true,'shared-ip');
+    await auth.login({email:'rate-b@example.com',password},true,'shared-ip');
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const result = await auth.login({email:'rate-a@example.com',password},false,'shared-ip');
+      assert.equal(result.user.email,'rate-a@example.com');
+    }
+
+    await assert.rejects(
+      auth.login({email:'rate-a@example.com',password:'wrong-password-123'},false,'shared-ip'),
+      error => error.status === 401,
+    );
+
+    const recovered = await auth.login({email:'rate-a@example.com',password},false,'shared-ip');
+    assert.equal(recovered.user.email,'rate-a@example.com');
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await assert.rejects(
+        auth.login({email:'rate-a@example.com',password:'wrong-password-123'},false,'shared-ip'),
+        error => error.status === 401,
+      );
+    }
+
+    await assert.rejects(
+      auth.login({email:'rate-a@example.com',password},false,'shared-ip'),
+      error => error.status === 429,
+    );
+
+    const otherUser = await auth.login({email:'rate-b@example.com',password},false,'shared-ip');
+    assert.equal(otherUser.user.email,'rate-b@example.com');
+  } finally {
+    await db.close();
+    rmSync(dir,{recursive:true,force:true});
+  }
+});
+
 test('Banco: migra uma base antiga sem perder registros', async () => {
   const dir = mkdtempSync(join(tmpdir(),'zeus-migration-'));
   const path = join(dir,'legacy.sqlite');
@@ -305,16 +350,18 @@ test('PostgreSQL: persiste cadastro e permite login após reconectar', {skip: !p
   const email = `postgres-login-${Date.now()}@example.com`;
   const password = 'secure-postgres-password-123';
   let userId;
+  let sessionToken;
 
   const firstConnection = new PostgresDatabase(process.env.TEST_DATABASE_URL);
   await firstConnection.init();
   try {
     const versions = (await firstConnection.query('SELECT version FROM schema_migrations ORDER BY version')).recordset.map(row => row.version);
-    assert.deepEqual(versions,[1,2,3,4,5]);
+    assert.deepEqual(versions,[1,2,3,4,5,6]);
 
     const auth = new AuthService(new FinanceRepository(firstConnection));
     const registered = await auth.login({email,password},true,'postgres-register');
     userId = registered.user.id;
+    sessionToken = registered.token;
     assert.equal(registered.user.email,email);
 
     const stored = (await firstConnection.query('SELECT email,password FROM users WHERE id=?',[userId])).recordset[0];
@@ -329,6 +376,7 @@ test('PostgreSQL: persiste cadastro e permite login após reconectar', {skip: !p
   await secondConnection.init();
   try {
     const auth = new AuthService(new FinanceRepository(secondConnection));
+    assert.equal(await auth.authenticate(sessionToken),userId);
     const loggedIn = await auth.login({email,password},false,'postgres-login');
     assert.equal(loggedIn.user.id,userId);
     assert.equal(loggedIn.user.email,email);
