@@ -25,6 +25,22 @@ const dateOnly = (value, {optional = false} = {}) => {
 };
 
 const digest = value => createHash('sha256').update(value).digest('hex');
+const dummyPasswordHash = `${'0'.repeat(32)}:${'0'.repeat(128)}`;
+
+const createPasswordHash = password => {
+  const salt = randomBytes(16).toString('hex');
+  const hash = scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${hash}`;
+};
+
+const verifyPassword = (password, stored) => {
+  const [salt, hash] = String(stored ?? dummyPasswordHash).split(':');
+  const safeSalt = /^[a-f0-9]{32}$/i.test(salt ?? '') ? salt : '0'.repeat(32);
+  const safeHash = /^[a-f0-9]{128}$/i.test(hash ?? '') ? hash : '0'.repeat(128);
+  const derived = scryptSync(password, safeSalt, 64);
+  const expected = Buffer.from(safeHash, 'hex');
+  return expected.length === derived.length && timingSafeEqual(derived, expected);
+};
 const appTimeZone = process.env.APP_TIMEZONE ?? 'America/Sao_Paulo';
 const today = () => {
   const parts = new Intl.DateTimeFormat('en-US', {timeZone: appTimeZone, year: 'numeric', month: '2-digit', day: '2-digit'}).formatToParts(new Date());
@@ -443,13 +459,11 @@ export class AuthService {
     let user = (await this.db.query('SELECT * FROM users WHERE email=?', [email])).recordset[0];
     if (register) {
       if (user) throw new HttpError(409, 'Não foi possível cadastrar este e-mail.');
-      const salt = randomBytes(16).toString('hex');
-      const hash = scryptSync(data.password, salt, 64).toString('hex');
-      const result = await this.db.query('INSERT INTO users(email,password) VALUES(?,?) RETURNING id', [email, `${salt}:${hash}`]);
+      const password = createPasswordHash(data.password);
+      const result = await this.db.query('INSERT INTO users(email,password) VALUES(?,?) RETURNING id', [email, password]);
       user = {id: result.recordset[0].id, email};
     } else {
-      const [salt, hash] = (user?.password ?? `${'0'.repeat(32)}:${'0'.repeat(128)}`).split(':');
-      const valid = timingSafeEqual(scryptSync(data.password, salt, 64), Buffer.from(hash, 'hex'));
+      const valid = verifyPassword(data.password, user?.password);
       if (!user || !valid) {
         this.registerFailedLogin(attemptKey, now);
         throw new HttpError(401, 'E-mail ou senha incorretos.');
@@ -461,6 +475,29 @@ export class AuthService {
     await this.db.query('DELETE FROM sessions WHERE expires<=?', [now]);
     await this.db.query('INSERT INTO sessions(token,user_id,expires) VALUES(?,?,?)', [digest(token),user.id,now+86400000]);
     return {token, user: {id:user.id,email:user.email}};
+  }
+
+  async changePassword(userId, token, data) {
+    if (typeof data.currentPassword !== 'string' || data.currentPassword.length < 12 || data.currentPassword.length > 128) {
+      throw new HttpError(400, 'Senha atual inválida.');
+    }
+    if (typeof data.newPassword !== 'string' || data.newPassword.length < 12 || data.newPassword.length > 128) {
+      throw new HttpError(400, 'Use uma nova senha entre 12 e 128 caracteres.');
+    }
+    if (data.currentPassword === data.newPassword) {
+      throw new HttpError(400, 'A nova senha deve ser diferente da senha atual.');
+    }
+
+    const user = (await this.db.query('SELECT id,password FROM users WHERE id=?', [userId])).recordset[0];
+    if (!user || !verifyPassword(data.currentPassword,user.password)) {
+      throw new HttpError(401, 'Senha atual incorreta.');
+    }
+
+    const nextPassword = createPasswordHash(data.newPassword);
+    await this.db.transaction(async database => {
+      await database.query('UPDATE users SET password=? WHERE id=?', [nextPassword,userId]);
+      await database.query('DELETE FROM sessions WHERE user_id=? AND token<>?', [userId,digest(token)]);
+    });
   }
 
   async logout(token) { await this.db.query('DELETE FROM sessions WHERE token=?', [digest(token)]); }
@@ -553,6 +590,10 @@ export class FinanceApi {
       if (path === '/api/logout' && req.method === 'POST') {
         await this.auth.logout(token);
         return send(200,{}, {'Set-Cookie':`zeus_session=; HttpOnly; SameSite=Strict; Path=/api; Max-Age=0${secure}`});
+      }
+      if (path === '/api/change-password' && req.method === 'POST') {
+        await this.auth.changePassword(user,token,await this.body(req));
+        return send(200,{});
       }
 
       if (path === '/api/budgets') {
