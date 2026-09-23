@@ -198,6 +198,10 @@ export function App() {
   const [debtPayments, setDebtPayments] = useState<DebtPayment[]>([])
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey())
   const [budgets, setBudgets] = useState<Budget[]>([])
+  const [passwordOpen, setPasswordOpen] = useState(false)
+  const [passwordBusy, setPasswordBusy] = useState(false)
+  const [passwordError, setPasswordError] = useState('')
+  const [passwordChanged, setPasswordChanged] = useState(false)
 
   const load = async () => {
     const [transactions, debts, goals, incomeEntries] = await Promise.all([
@@ -249,6 +253,9 @@ export function App() {
       setBudgets([])
       setSelectedMonth(currentMonthKey())
       setView('overview')
+      setPasswordOpen(false)
+      setPasswordError('')
+      setPasswordChanged(false)
       setError('Sua sessão expirou. Entre novamente.')
     }
 
@@ -293,9 +300,54 @@ export function App() {
       setBudgets([])
       setSelectedMonth(currentMonthKey())
       setView('overview')
+      setPasswordOpen(false)
+      setPasswordError('')
+      setPasswordChanged(false)
     } catch (e) {
       setError((e as Error).message)
     }
+  }
+
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const element = event.currentTarget
+    const form = new FormData(element)
+    const currentPassword = String(form.get('currentPassword') ?? '')
+    const newPassword = String(form.get('newPassword') ?? '')
+    const confirmation = String(form.get('confirmation') ?? '')
+
+    setPasswordError('')
+    setPasswordChanged(false)
+
+    if (newPassword !== confirmation) {
+      setPasswordError('A confirmação da nova senha não confere.')
+      return
+    }
+
+    setPasswordBusy(true)
+    try {
+      await api.request('change-password', 'POST', { currentPassword, newPassword })
+      element.reset()
+      setPasswordChanged(true)
+    } catch (e) {
+      setPasswordError((e as Error).message)
+    } finally {
+      setPasswordBusy(false)
+    }
+  }
+
+  function openPasswordDialog() {
+    setPasswordError('')
+    setPasswordChanged(false)
+    setPasswordOpen(true)
+    setMenu(false)
+  }
+
+  function closePasswordDialog() {
+    if (passwordBusy) return
+    setPasswordOpen(false)
+    setPasswordError('')
+    setPasswordChanged(false)
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -770,6 +822,10 @@ export function App() {
               <span>Conta ativa</span>
             </div>
           </div>
+          <button className="logout-button account-action-button" onClick={openPasswordDialog}>
+            <Icon name="shield" size={18} />
+            Alterar senha
+          </button>
           <button className="logout-button" onClick={logout}>
             <Icon name="logout" size={18} />
             Sair da conta
@@ -1535,6 +1591,62 @@ export function App() {
           </div>
         )}
       </main>
+
+      {passwordOpen && (
+        <div className="security-modal-backdrop" role="presentation" onMouseDown={event => {
+          if (event.target === event.currentTarget) closePasswordDialog()
+        }}>
+          <section className="security-modal" role="dialog" aria-modal="true" aria-labelledby="change-password-title">
+            <div className="security-modal__header">
+              <div>
+                <span className="panel__eyebrow">SEGURANÇA DA CONTA</span>
+                <h2 id="change-password-title">Alterar senha</h2>
+                <p>Ao salvar, as outras sessões da sua conta serão encerradas.</p>
+              </div>
+              <button className="icon-action" type="button" onClick={closePasswordDialog} aria-label="Fechar alteração de senha">
+                <Icon name="close" size={19} />
+              </button>
+            </div>
+
+            {passwordChanged ? (
+              <div className="security-success" role="status">
+                <Icon name="shield" size={19} />
+                <div>
+                  <strong>Senha alterada com sucesso.</strong>
+                  <span>Este dispositivo continua conectado e as outras sessões foram encerradas.</span>
+                </div>
+                <button className="secondary-button" type="button" onClick={closePasswordDialog}>Fechar</button>
+              </div>
+            ) : (
+              <form className="security-form" onSubmit={changePassword}>
+                <label>
+                  <span>Senha atual</span>
+                  <input name="currentPassword" type="password" minLength={12} maxLength={128} autoComplete="current-password" required />
+                </label>
+                <label>
+                  <span>Nova senha</span>
+                  <input name="newPassword" type="password" minLength={12} maxLength={128} autoComplete="new-password" required />
+                  <small>Use entre 12 e 128 caracteres.</small>
+                </label>
+                <label>
+                  <span>Confirmar nova senha</span>
+                  <input name="confirmation" type="password" minLength={12} maxLength={128} autoComplete="new-password" required />
+                </label>
+
+                {passwordError && <div className="security-error" role="alert">{passwordError}</div>}
+
+                <div className="form-actions">
+                  <button className="primary primary--full" disabled={passwordBusy}>
+                    {passwordBusy ? 'Alterando…' : 'Salvar nova senha'}
+                    {!passwordBusy && <Icon name="shield" size={17} />}
+                  </button>
+                  <button className="secondary-button" type="button" onClick={closePasswordDialog} disabled={passwordBusy}>Cancelar</button>
+                </div>
+              </form>
+            )}
+          </section>
+        </div>
+      )}
     </div>
   )
 }
