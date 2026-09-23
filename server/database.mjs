@@ -167,7 +167,7 @@ const sqliteMigrations = [
   {
     version: 7,
     name: 'recurring_expenses',
-    up(db) {
+    up(db, hasColumn) {
       db.exec(`
         CREATE TABLE IF NOT EXISTS recurring_expenses(
           id INTEGER PRIMARY KEY,
@@ -184,6 +184,17 @@ const sqliteMigrations = [
         );
         CREATE INDEX IF NOT EXISTS recurring_expenses_owner_period
         ON recurring_expenses(user_id,active,active_from,active_until,due_day);
+      `);
+      if (!hasColumn('entries', 'recurring_expense_id')) {
+        db.exec('ALTER TABLE entries ADD COLUMN recurring_expense_id INTEGER');
+      }
+      if (!hasColumn('entries', 'recurring_month')) {
+        db.exec('ALTER TABLE entries ADD COLUMN recurring_month TEXT');
+      }
+      db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS entries_recurring_month_unique
+        ON entries(user_id,recurring_expense_id,recurring_month)
+        WHERE recurring_expense_id IS NOT NULL AND recurring_month IS NOT NULL;
       `);
     },
   },
@@ -347,6 +358,11 @@ const postgresMigrations = [
       );
       CREATE INDEX IF NOT EXISTS recurring_expenses_owner_period
       ON recurring_expenses(user_id,active,active_from,active_until,due_day);
+      ALTER TABLE entries ADD COLUMN IF NOT EXISTS recurring_expense_id INTEGER;
+      ALTER TABLE entries ADD COLUMN IF NOT EXISTS recurring_month TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS entries_recurring_month_unique
+      ON entries(user_id,recurring_expense_id,recurring_month)
+      WHERE recurring_expense_id IS NOT NULL AND recurring_month IS NOT NULL;
     `,
   },
 ];
