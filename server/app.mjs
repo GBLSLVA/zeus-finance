@@ -193,19 +193,32 @@ export class FinanceRepository {
     return (await this.listDebts(user)).find(row => row.id === result.recordset[0].id);
   }
 
+  async debtForChange(database, user, id) {
+    const lock = database.kind === 'postgres' ? ' FOR UPDATE' : '';
+    return (await database.query(`SELECT * FROM debts WHERE user_id=? AND id=?${lock}`, [user,id])).recordset[0];
+  }
+
   async updateDebt(user, id, data) {
     const fields = this.debtFields(data);
-    const current = (await this.db.query('SELECT * FROM debts WHERE user_id=? AND id=?', [user,id])).recordset[0];
-    if (!current) throw new HttpError(404, 'Dívida não encontrada.');
-    const paid = (await this.db.query('SELECT COALESCE(SUM(amount),0) AS total FROM debt_payments WHERE user_id=? AND debt_id=?', [user,id])).recordset[0].total;
-    if (fields.originalAmount < paid) throw new HttpError(400, 'O valor original não pode ser menor que o total já pago.');
-    const currentBalance = fields.originalAmount - paid;
-    const status = currentBalance === 0 ? 'paid' : 'active';
-    await this.db.query(
-      'UPDATE debts SET name=?,creditor=?,original_amount=?,current_balance=?,interest_rate_bps=?,installments_total=?,due_day=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=?',
-      [fields.name, fields.creditor, fields.originalAmount, currentBalance, fields.interestRateBps, fields.installmentsTotal, fields.dueDay, status, user, id],
-    );
-    return (await this.listDebts(user)).find(row => row.id === id);
+    return this.db.transaction(async database => {
+      const current = await this.debtForChange(database,user,id);
+      if (!current) throw new HttpError(404, 'Dívida não encontrada.');
+
+      const paid = (await database.query(
+        'SELECT COALESCE(SUM(amount),0) AS total FROM debt_payments WHERE user_id=? AND debt_id=?',
+        [user,id],
+      )).recordset[0].total;
+      if (fields.originalAmount < paid) throw new HttpError(400, 'O valor original não pode ser menor que o total já pago.');
+
+      const currentBalance = fields.originalAmount - paid;
+      const status = currentBalance === 0 ? 'paid' : 'active';
+      await database.query(
+        'UPDATE debts SET name=?,creditor=?,original_amount=?,current_balance=?,interest_rate_bps=?,installments_total=?,due_day=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=?',
+        [fields.name, fields.creditor, fields.originalAmount, currentBalance, fields.interestRateBps, fields.installmentsTotal, fields.dueDay, status, user, id],
+      );
+      const updated = (await database.query('SELECT * FROM debts WHERE user_id=? AND id=?', [user,id])).recordset[0];
+      return normalizeDebt(updated);
+    });
   }
 
   async removeDebt(user, id) {
@@ -223,44 +236,59 @@ export class FinanceRepository {
     return result.recordset.map(normalizeDebtPayment);
   }
 
-  async recalculateDebt(user, debtId) {
-    const debt = (await this.db.query('SELECT * FROM debts WHERE user_id=? AND id=?', [user,debtId])).recordset[0];
+  async recalculateDebt(user, debtId, database = this.db) {
+    const debt = (await database.query('SELECT * FROM debts WHERE user_id=? AND id=?', [user,debtId])).recordset[0];
     if (!debt) throw new HttpError(404, 'Dívida não encontrada.');
-    const summary = (await this.db.query(
+    const summary = (await database.query(
       'SELECT COALESCE(SUM(amount),0) AS paid, COALESCE(SUM(counts_as_installment),0) AS installments FROM debt_payments WHERE user_id=? AND debt_id=?',
       [user,debtId],
     )).recordset[0];
     const balance = Math.max(0, debt.original_amount - summary.paid);
     const installmentsPaid = debt.installments_total > 0 ? Math.min(debt.installments_total, summary.installments) : summary.installments;
-    await this.db.query(
+    await database.query(
       'UPDATE debts SET current_balance=?,installments_paid=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=?',
       [balance, installmentsPaid, balance === 0 ? 'paid' : 'active', user, debtId],
     );
-    return (await this.listDebts(user)).find(row => row.id === debtId);
+    const updated = (await database.query('SELECT * FROM debts WHERE user_id=? AND id=?', [user,debtId])).recordset[0];
+    return normalizeDebt(updated);
   }
 
   async addDebtPayment(user, debtId, data) {
-    const debt = (await this.db.query('SELECT * FROM debts WHERE user_id=? AND id=?', [user,debtId])).recordset[0];
-    if (!debt) throw new HttpError(404, 'Dívida não encontrada.');
-    if (debt.current_balance <= 0) throw new HttpError(400, 'Esta dívida já está quitada.');
     const amount = cents(data.amount);
-    if (amount > debt.current_balance) throw new HttpError(400, 'O pagamento não pode ser maior que o saldo atual.');
     const paymentDate = dateOnly(data.paymentDate ?? today());
     const note = data.note ? text(data.note, 240) : null;
     const countsAsInstallment = data.countsAsInstallment === false ? 0 : 1;
-    const result = await this.db.query(
-      'INSERT INTO debt_payments(user_id,debt_id,amount,payment_date,note,counts_as_installment) VALUES(?,?,?,?,?,?) RETURNING id',
-      [user,debtId,amount,paymentDate,note,countsAsInstallment],
-    );
-    const debtAfter = await this.recalculateDebt(user,debtId);
-    const payment = (await this.listDebtPayments(user,debtId)).find(row => row.id === result.recordset[0].id);
-    return {payment,debt:debtAfter};
+
+    return this.db.transaction(async database => {
+      const debt = await this.debtForChange(database,user,debtId);
+      if (!debt) throw new HttpError(404, 'Dívida não encontrada.');
+      if (debt.current_balance <= 0) throw new HttpError(400, 'Esta dívida já está quitada.');
+      if (amount > debt.current_balance) throw new HttpError(400, 'O pagamento não pode ser maior que o saldo atual.');
+
+      const result = await database.query(
+        'INSERT INTO debt_payments(user_id,debt_id,amount,payment_date,note,counts_as_installment) VALUES(?,?,?,?,?,?) RETURNING id',
+        [user,debtId,amount,paymentDate,note,countsAsInstallment],
+      );
+      const debtAfter = await this.recalculateDebt(user,debtId,database);
+      const paymentRow = (await database.query(
+        'SELECT * FROM debt_payments WHERE user_id=? AND debt_id=? AND id=?',
+        [user,debtId,result.recordset[0].id],
+      )).recordset[0];
+      return {payment:normalizeDebtPayment(paymentRow),debt:debtAfter};
+    });
   }
 
   async removeDebtPayment(user, debtId, paymentId) {
-    const result = await this.db.query('DELETE FROM debt_payments WHERE user_id=? AND debt_id=? AND id=?', [user,debtId,paymentId]);
-    if (!result.rowsAffected[0]) throw new HttpError(404, 'Pagamento não encontrado.');
-    return this.recalculateDebt(user,debtId);
+    return this.db.transaction(async database => {
+      const debt = await this.debtForChange(database,user,debtId);
+      if (!debt) throw new HttpError(404, 'Dívida não encontrada.');
+      const result = await database.query(
+        'DELETE FROM debt_payments WHERE user_id=? AND debt_id=? AND id=?',
+        [user,debtId,paymentId],
+      );
+      if (!result.rowsAffected[0]) throw new HttpError(404, 'Pagamento não encontrado.');
+      return this.recalculateDebt(user,debtId,database);
+    });
   }
 
   async listBudgets(user, month) {
