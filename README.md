@@ -18,6 +18,7 @@ Funcionalidades principais:
 - Rendas extras por data de recebimento.
 - Gastos com data financeira própria, independente da data de cadastro.
 - Dashboard com receita mensal, salário, extras, gastos, saldo estimado, dívida total e metas.
+- Cálculos oficiais do dashboard centralizados no backend, incluindo histórico de 6 meses e regras de vigência de receitas.
 - ZEUS Insights com análises automáticas de saldo, comparação mensal, categoria dominante, orçamento, dívidas e metas.
 - Detecção de possíveis lançamentos duplicados, gastos individuais fora do padrão e categorias com alta anormal.
 - Dívidas estruturadas com credor, valor original, saldo atual, juros, parcelas, vencimento e status.
@@ -139,6 +140,7 @@ A suíte cobre atualmente:
 - proteção de origem;
 - migração de uma base antiga sem perda dos registros principais;
 - criação, atualização, listagem, remoção e isolamento de orçamentos mensais;
+- cálculo oficial do dashboard e isolamento do resumo financeiro entre usuários;
 - geração de insights financeiros e isolamento dos insights entre usuários;
 - detecção de duplicidade e anomalias com base no histórico financeiro do próprio usuário.
 
@@ -161,13 +163,13 @@ O workflow em `.github/workflows/ci.yml` executa em pushes e pull requests para 
 
 Fluxo principal:
 
-`React -> ApiClient -> FinanceApi -> FinanceRepository -> SqliteDatabase -> SQLite`
+`React -> ApiClient -> FinanceApi -> FinanceRepository -> SQLite local / PostgreSQL em produção`
 
 Responsabilidades:
 
 - **ApiClient:** chamadas HTTP da interface.
 - **FinanceApi:** autenticação, roteamento, validação de origem e respostas HTTP.
-- **FinanceRepository:** regras de persistência de registros e receitas.
+- **FinanceRepository:** regras de persistência e cálculos financeiros oficiais do dashboard e dos insights.
 - **AuthService:** cadastro, login, troca de senha, sessões e proteção contra tentativas excessivas.
 - **SqliteDatabase:** conexão SQLite, queries e migrations.
 
