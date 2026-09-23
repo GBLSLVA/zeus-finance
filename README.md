@@ -13,6 +13,7 @@ Funcionalidades principais:
 - Troca de senha exigindo a senha atual, com encerramento automático das outras sessões.
 - Exclusão segura da conta, com confirmação por senha e remoção transacional dos dados do usuário.
 - Exportação completa dos dados da conta em backup JSON v2 isolado por usuário, incluindo movimentações de metas.
+- Exportação CSV compatível com Excel/Google Sheets, com separador regional e proteção contra fórmulas em campos de texto.
 - Cadastro, edição, listagem e exclusão de gastos, dívidas, metas e receitas.
 - Metas com histórico de aportes, retiradas, saldo inicial e correção de movimentações.
 - Salários recorrentes com período de vigência e status ativo/inativo.
@@ -235,7 +236,7 @@ Prioridades seguintes:
 - resumo financeiro semanal e mensal;
 - ampliar o assistente conversacional com histórico de perguntas e linguagem natural mais flexível;
 - categorias personalizadas;
-- exportação CSV/PDF;
+- exportação PDF;
 - restauração de backup JSON;
 - PWA e deploy HTTPS.
 
