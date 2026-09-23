@@ -223,6 +223,16 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal((await call('budgets?month=2026-13','GET',undefined,first.cookie)).status,400);
     assert.equal((await call('budgets','POST',{month:'2026-09',category:'Inválida',limit:100},first.cookie)).status,400);
 
+    const insights = await call('insights?month=2026-09','GET',undefined,first.cookie);
+    assert.equal(insights.status,200);
+    assert.equal(insights.data.month,'2026-09');
+    assert.equal(insights.data.spent,20);
+    assert.ok(Array.isArray(insights.data.items));
+    assert.ok(insights.data.items.some(item => item.id === 'top-category' && item.title.includes('Comida')));
+    assert.ok(insights.data.items.some(item => item.id === 'debt-progress'));
+    assert.ok(insights.data.items.some(item => item.id === 'goal-progress'));
+    assert.equal((await call('insights?month=2026-13','GET',undefined,first.cookie)).status,400);
+
     const second = await call('register','POST',{email:'b@example.com',password:'secure-password-456'});
     assert.deepEqual((await call('transactions','GET',undefined,second.cookie)).data,[]);
 
@@ -233,6 +243,12 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
       transactionDate:'2026-09-03',
     },second.cookie);
     assert.equal(secondEntry.status,201);
+
+    const secondInsights = await call('insights?month=2026-09','GET',undefined,second.cookie);
+    assert.equal(secondInsights.status,200);
+    assert.equal(secondInsights.data.spent,77);
+    assert.equal(secondInsights.data.items.some(item => item.id === 'debt-progress'),false);
+    assert.equal(secondInsights.data.items.some(item => item.id === 'goal-progress'),false);
 
     const firstExport = await call('export','GET',undefined,first.cookie);
     assert.equal(firstExport.status,200);
