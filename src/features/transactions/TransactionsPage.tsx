@@ -29,7 +29,6 @@ export function TransactionsPage({
       <section className="panel records-panel">
         <div className="panel__header records-panel__header">
           <div>
-            <span className="panel__eyebrow">REGISTROS</span>
             <h2>Gastos cadastrados</h2>
           </div>
           <span className="records-count">{entries.length} {entries.length === 1 ? 'item' : 'itens'}</span>
@@ -78,7 +77,6 @@ export function TransactionsPage({
       </section>
 
       <aside className="panel record-form-panel">
-        <span className="panel__eyebrow">{editingTransaction ? 'EDITAR GASTO' : 'NOVO GASTO'}</span>
         <h2>{editingTransaction ? 'Atualizar gasto' : 'Adicionar gasto'}</h2>
         <p>Registre o gasto e escolha a categoria para acompanhar a distribuição.</p>
 
