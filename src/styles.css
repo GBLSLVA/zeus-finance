@@ -13,8 +13,8 @@
   --line: #242d37;
   --line-strong: #34404c;
   --text: #f7f9fb;
-  --muted: #9ca9b6;
-  --subtle: #758392;
+  --muted: #a9b4bf;
+  --subtle: #8795a3;
   --accent: #58d6a3;
   --accent-hover: #6be0b1;
   --accent-soft: rgba(88, 214, 163, 0.12);
@@ -147,11 +147,11 @@ svg {
 }
 
 .secondary-button {
-  min-height: 40px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 9px 13px;
+  padding: 10px 14px;
   border: 1px solid var(--line-strong);
   border-radius: 10px;
   background: var(--surface-2);
@@ -167,7 +167,7 @@ svg {
 }
 
 .link-button {
-  min-height: 36px;
+  min-height: 40px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -197,7 +197,7 @@ svg {
 
 .alert--success {
   border: 1px solid rgba(88, 214, 163, 0.3);
-  background: var(--accent-soft);
+  background: transparent;
   color: var(--accent);
 }
 
@@ -553,7 +553,7 @@ svg {
 }
 
 .nav-item.active .nav-count {
-  background: var(--accent-soft);
+  background: transparent;
   color: var(--accent);
 }
 
@@ -746,7 +746,7 @@ svg {
   padding: 16px;
   border: 1px solid rgba(88, 214, 163, 0.28);
   border-radius: var(--radius-md);
-  background: var(--accent-soft);
+  background: transparent;
   color: var(--accent);
 }
 
@@ -902,7 +902,7 @@ svg {
 }
 
 .dashboard-hero {
-  min-height: 180px;
+  min-height: 168px;
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.7fr);
   border: 1px solid #2c3a3a;
@@ -914,19 +914,8 @@ svg {
 .dashboard-hero__main {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: clamp(24px, 4vw, 36px);
-}
-
-.hero-icon {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  flex: none;
-  border-radius: 14px;
-  background: var(--accent);
-  color: var(--accent-ink);
+  gap: 0;
+  padding: clamp(26px, 4vw, 38px);
 }
 
 .dashboard-hero__main span {
@@ -985,7 +974,7 @@ svg {
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -1015,20 +1004,20 @@ svg {
 .metric-card__icon {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: var(--surface-3);
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
   color: var(--muted);
 }
 
 .metric-card--accent .metric-card__icon {
-  background: var(--accent-soft);
+  background: transparent;
   color: var(--accent);
 }
 
 .metric-card--warning .metric-card__icon {
-  background: rgba(241, 201, 107, 0.1);
+  background: transparent;
   color: var(--gold);
 }
 
@@ -1046,8 +1035,8 @@ svg {
   margin-top: auto;
   padding-top: 12px;
   color: var(--subtle);
-  font-size: 11px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .dashboard-grid {
@@ -1083,9 +1072,9 @@ svg {
 }
 
 .panel__eyebrow {
-  margin-bottom: 5px;
+  margin-bottom: 6px;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .panel h2 {
@@ -1108,7 +1097,7 @@ svg {
   border-radius: 9px;
   background: var(--surface-2);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 650;
 }
 
@@ -1153,7 +1142,7 @@ svg {
 
 .donut__center span {
   color: var(--subtle);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .donut__center strong {
@@ -1270,10 +1259,10 @@ svg {
 .compact-row__icon {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: var(--surface-3);
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
   color: var(--muted);
 }
 
@@ -1499,13 +1488,13 @@ td {
 }
 
 th {
-  height: 42px;
-  color: var(--subtle);
+  height: 44px;
+  color: var(--muted);
   background: #0f1419;
-  font-size: 9px;
-  font-weight: 760;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 td {
@@ -1544,7 +1533,7 @@ tbody tr:hover td {
 }
 
 .record-icon--transactions {
-  background: var(--accent-soft);
+  background: transparent;
   color: var(--accent);
 }
 
@@ -1572,7 +1561,7 @@ tbody tr:hover td {
 .record-name div span {
   margin-top: 2px;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .table-value {
@@ -1593,9 +1582,9 @@ tbody tr:hover td {
 .table-progress span {
   padding: 2px 6px;
   border-radius: 6px;
-  background: var(--accent-soft);
+  background: transparent;
   color: var(--accent);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -1641,7 +1630,7 @@ tbody tr:hover td {
 .table-empty span {
   margin-top: 5px;
   color: var(--subtle);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .record-form-panel {
@@ -1711,8 +1700,8 @@ tbody tr:hover td {
   padding-top: 16px;
   border-top: 1px solid var(--line);
   color: var(--subtle);
-  font-size: 10px;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .form-security svg {
@@ -1992,7 +1981,7 @@ tbody tr:hover td {
 
 .income-summary-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(0, 1fr));
   border-bottom: 1px solid var(--line);
   background: #0f1419;
 }
@@ -2042,7 +2031,7 @@ tbody tr:hover td {
 }
 
 .income-type--salary {
-  background: var(--accent-soft);
+  background: transparent;
   color: var(--accent);
 }
 
@@ -2123,7 +2112,7 @@ tbody tr:hover td {
 
 .debt-summary-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -2163,18 +2152,18 @@ tbody tr:hover td {
 }
 
 .debt-status--active {
-  background: rgba(241, 201, 107, 0.1);
+  background: transparent;
   color: var(--gold);
 }
 
 .debt-status--paid {
-  background: var(--accent-soft);
+  background: transparent;
   color: var(--accent);
 }
 
 .debt-card__values {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin-top: 18px;
 }
@@ -2371,7 +2360,7 @@ tbody tr:hover td {
 }
 
 .period-toolbar__current {
-  min-height: 36px;
+  min-height: 40px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -2407,7 +2396,7 @@ tbody tr:hover td {
 
 .budget-overview__summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(0, 1fr));
   gap: 9px;
 }
 
@@ -2616,7 +2605,7 @@ tbody tr:hover td {
 
 .budget-summary-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -2665,7 +2654,7 @@ tbody tr:hover td {
 
 .budget-category-card__numbers {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 16px;
 }
@@ -2725,7 +2714,7 @@ tbody tr:hover td {
   display: grid;
   gap: 7px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 650;
 }
 
@@ -2837,10 +2826,10 @@ tbody tr:hover td {
 }
 
 .insights-badge {
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 999px;
   padding: 0.35rem 0.65rem;
-  font-size: 0.72rem;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2862,7 +2851,7 @@ tbody tr:hover td {
   gap: 0.85rem;
   min-height: 7rem;
   padding: 1rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 1rem;
   background: rgba(255,255,255,0.025);
 }
@@ -2893,7 +2882,7 @@ tbody tr:hover td {
 .insight-card p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.88rem;
+  font-size: 14px;
   line-height: 1.55;
 }
 
@@ -2911,7 +2900,7 @@ tbody tr:hover td {
   gap: 1rem;
   margin-top: 1.15rem;
   padding: 1.15rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 1rem;
   background: rgba(255,255,255,0.025);
 }
@@ -2929,7 +2918,7 @@ tbody tr:hover td {
 .monthly-summary__label {
   display: block;
   margin-bottom: 0.45rem;
-  font-size: 0.7rem;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.1em;
   color: var(--muted);
@@ -2959,7 +2948,7 @@ tbody tr:hover td {
   position: relative;
   padding-left: 1rem;
   color: var(--muted);
-  font-size: 0.86rem;
+  font-size: 14px;
   line-height: 1.45;
 }
 
@@ -3017,7 +3006,7 @@ tbody tr:hover td {
   height: 2rem;
   padding: 0 0.55rem;
   border-radius: 999px;
-  font-size: 0.7rem;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
   background: rgba(124, 168, 255, 0.14);
@@ -3056,13 +3045,13 @@ tbody tr:hover td {
 }
 
 .assistant-suggestions button {
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 999px;
   padding: 0.5rem 0.72rem;
   background: rgba(255,255,255,0.025);
   color: var(--muted);
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 13px;
   cursor: pointer;
 }
 
@@ -3096,7 +3085,7 @@ tbody tr:hover td {
 .recurring-pay-button {
   min-height: 2.2rem;
   padding: 0.45rem 0.7rem;
-  font-size: 0.78rem;
+  font-size: 13px;
   white-space: nowrap;
 }
 
@@ -3108,5 +3097,202 @@ tbody tr:hover td {
 @media (max-width: 720px) {
   .recurring-pay-button {
     width: 100%;
+  }
+}
+
+
+/* Impeccable polish — hierarchy, legibility and flatter surfaces */
+.metrics-grid .metric-card:first-child {
+  background: #121a19;
+  border-color: #30423d;
+}
+
+.metrics-grid .metric-card:first-child > strong {
+  font-size: clamp(28px, 2.6vw, 34px);
+}
+
+.insights-panel,
+.assistant-panel {
+  overflow: visible;
+}
+
+.insights-panel__header,
+.assistant-panel__header {
+  align-items: flex-start;
+}
+
+.insights-grid {
+  gap: 0;
+  margin-top: 0;
+  padding: 0 22px 8px;
+}
+
+.insight-card {
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  padding: 16px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.insight-card + .insight-card {
+  border-top: 1px solid var(--line);
+}
+
+.insight-card__signal {
+  width: 8px;
+  height: 8px;
+  min-height: 0;
+  margin-top: 5px;
+  border-radius: 50%;
+}
+
+.monthly-summary {
+  grid-template-columns: minmax(0, 1.35fr) minmax(15rem, 0.65fr);
+  gap: 20px;
+  margin: 0;
+  padding: 20px 22px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.monthly-summary--warning,
+.monthly-summary--positive {
+  border-color: var(--line);
+  background: transparent;
+}
+
+.monthly-summary__highlights li {
+  font-size: 14px;
+}
+
+.assistant-answer {
+  display: block;
+  margin: 0;
+  padding: 18px 22px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.assistant-answer > strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.assistant-form {
+  margin: 0;
+  padding: 18px 22px 0;
+}
+
+.assistant-suggestions {
+  margin: 12px 0 0;
+  padding: 0 22px 20px;
+}
+
+.assistant-suggestions button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border-color: var(--line-strong);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.auth-form .remember-field small,
+.security-form small,
+.security-success span,
+.danger-warning span,
+.account-card strong,
+.account-card div span,
+.metric-card__detail,
+.donut__center span,
+.category-row__name span,
+.compact-row div strong,
+.compact-row div span,
+.compact-row__value,
+.panel-total span,
+.mini-empty,
+.goal-overview__summary div span,
+.goal-overview__footer span,
+.goal-overview__footer strong,
+.goal-preview div strong,
+.goal-preview div span,
+.goal-preview__percent,
+.table-empty span,
+.income-summary-strip span,
+.income-date,
+.debt-card__values span,
+.debt-card__meta,
+.payment-row span,
+.period-toolbar__current strong,
+.period-today,
+.budget-overview__summary span,
+.budget-overview__footer,
+.budget-mini-row div strong,
+.budget-mini-row div span,
+.budget-mini-row > strong,
+.history-row__month span,
+.history-row__values span,
+.history-row > strong,
+.history-legend,
+.budget-category-card__header div div span,
+.budget-category-card__numbers span,
+.budget-category-card__numbers strong,
+.budget-category-card__usage,
+.budget-inline-form label {
+  font-size: 12px;
+}
+
+.record-name div span,
+.recurring-pay-button,
+.income-type,
+.debt-status {
+  font-size: 12px;
+}
+
+.icon-action {
+  min-width: 40px;
+  min-height: 40px;
+}
+
+.recurring-pay-button {
+  min-height: 40px;
+}
+
+@media (max-width: 1180px) {
+  .metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .monthly-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .assistant-form,
+  .assistant-suggestions,
+  .insights-grid {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .monthly-summary,
+  .assistant-answer {
+    padding-left: 16px;
+    padding-right: 16px;
   }
 }
