@@ -19,6 +19,7 @@ Funcionalidades principais:
 - Gastos com data financeira própria, independente da data de cadastro.
 - Dashboard com receita mensal, salário, extras, gastos, saldo estimado, dívida total e metas.
 - ZEUS Insights com análises automáticas de saldo, comparação mensal, categoria dominante, orçamento, dívidas e metas.
+- Detecção de possíveis lançamentos duplicados, gastos individuais fora do padrão e categorias com alta anormal.
 - Dívidas estruturadas com credor, valor original, saldo atual, juros, parcelas, vencimento e status.
 - Pagamentos parciais de dívidas com histórico, baixa automática do saldo e atualização das parcelas pagas.
 - Pagamentos e edições de dívidas protegidos por transações de banco para evitar inconsistências em operações simultâneas.
@@ -138,7 +139,8 @@ A suíte cobre atualmente:
 - proteção de origem;
 - migração de uma base antiga sem perda dos registros principais;
 - criação, atualização, listagem, remoção e isolamento de orçamentos mensais;
-- geração de insights financeiros e isolamento dos insights entre usuários.
+- geração de insights financeiros e isolamento dos insights entre usuários;
+- detecção de duplicidade e anomalias com base no histórico financeiro do próprio usuário.
 
 ## Build
 

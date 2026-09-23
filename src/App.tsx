@@ -63,7 +63,7 @@ type User = { id: number; email: string }
 type InsightTone = 'warning' | 'positive' | 'info'
 type Insight = {
   id: string
-  type: 'balance' | 'comparison' | 'category' | 'budget' | 'debt' | 'goal' | 'onboarding'
+  type: 'balance' | 'comparison' | 'category' | 'budget' | 'debt' | 'goal' | 'anomaly' | 'trend' | 'onboarding'
   tone: InsightTone
   title: string
   message: string

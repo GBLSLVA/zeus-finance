@@ -67,6 +67,16 @@ const shiftMonthKey = (monthKey, offset) => {
 const moneyText = value =>
   Number(value).toLocaleString('pt-BR', {style:'currency',currency:'BRL'});
 
+const median = values => {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a,b) => a-b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+};
+
+const normalizeInsightName = value =>
+  String(value ?? '').trim().toLocaleLowerCase('pt-BR').replace(/\s+/g,' ');
+
 const normalizeEntry = row => ({
   id: row.id,
   name: row.name,
@@ -172,7 +182,115 @@ export class FinanceRepository {
         .reduce((sum, entry) => sum + entry.value, 0),
     })).sort((a,b) => b.total - a.total);
 
+    const historicalMonthKeys = [
+      shiftMonthKey(monthKey, -1),
+      shiftMonthKey(monthKey, -2),
+      shiftMonthKey(monthKey, -3),
+    ];
+    const historicalTransactions = transactions.filter(entry =>
+      historicalMonthKeys.includes(entry.transactionDate?.slice(0,7)),
+    );
+
+    const duplicateGroups = new Map();
+    for (const entry of monthTransactions) {
+      const key = [
+        normalizeInsightName(entry.name),
+        entry.category,
+        entry.value.toFixed(2),
+        entry.transactionDate,
+      ].join('|');
+      const group = duplicateGroups.get(key) ?? [];
+      group.push(entry);
+      duplicateGroups.set(key,group);
+    }
+    const duplicateGroup = [...duplicateGroups.values()]
+      .filter(group => group.length > 1)
+      .sort((a,b) => (b.length - a.length) || (b[0].value - a[0].value))[0];
+
+    const unusualTransactions = monthTransactions.map(entry => {
+      const history = historicalTransactions
+        .filter(previous => previous.category === entry.category)
+        .map(previous => previous.value);
+      const baseline = median(history);
+      return {
+        entry,
+        samples:history.length,
+        baseline,
+        ratio:baseline > 0 ? entry.value / baseline : 0,
+        difference:entry.value - baseline,
+      };
+    }).filter(item =>
+      item.samples >= 3
+      && item.baseline > 0
+      && item.ratio >= 2.5
+      && item.difference >= 50
+    ).sort((a,b) => b.ratio - a.ratio);
+
+    const categorySpikes = categories.map(category => {
+      const current = categoryTotals.find(item => item.category === category)?.total ?? 0;
+      const historicalTotals = historicalMonthKeys.map(key =>
+        transactions
+          .filter(entry => entry.category === category && entry.transactionDate?.slice(0,7) === key)
+          .reduce((sum, entry) => sum + entry.value, 0)
+      );
+      const monthsWithData = historicalTotals.filter(value => value > 0);
+      const baseline = monthsWithData.length
+        ? monthsWithData.reduce((sum,value) => sum + value,0) / monthsWithData.length
+        : 0;
+      return {
+        category,
+        current,
+        samples:monthsWithData.length,
+        baseline,
+        ratio:baseline > 0 ? current / baseline : 0,
+        difference:current - baseline,
+      };
+    }).filter(item =>
+      item.samples >= 2
+      && item.baseline > 0
+      && item.ratio >= 1.5
+      && item.difference >= 50
+    ).sort((a,b) => b.ratio - a.ratio);
+
     const items = [];
+
+    if (duplicateGroup) {
+      const entry = duplicateGroup[0];
+      items.push({
+        id:'possible-duplicate',
+        type:'anomaly',
+        tone:'warning',
+        title:'Possível lançamento duplicado',
+        message:`${duplicateGroup.length} lançamentos de "${entry.name}" têm o mesmo valor (${moneyText(entry.value)}) e a mesma data. Vale conferir.`,
+        value:duplicateGroup.length,
+      });
+    }
+
+    const unusual = unusualTransactions[0];
+    if (unusual) {
+      const above = ((unusual.entry.value - unusual.baseline) / unusual.baseline) * 100;
+      items.push({
+        id:'unusual-transaction',
+        type:'anomaly',
+        tone:'warning',
+        title:'Gasto fora do seu padrão',
+        message:`"${unusual.entry.name}" foi de ${moneyText(unusual.entry.value)}, cerca de ${Math.round(above)}% acima da mediana recente de ${unusual.entry.category} (${moneyText(unusual.baseline)}).`,
+        value:above,
+      });
+    }
+
+    const spike = categorySpikes[0];
+    if (spike) {
+      const above = ((spike.current - spike.baseline) / spike.baseline) * 100;
+      items.push({
+        id:'category-spike',
+        type:'trend',
+        tone:'warning',
+        title:`${spike.category} subiu acima do padrão`,
+        message:`O total desta categoria está ${Math.round(above)}% acima da média dos meses recentes: ${moneyText(spike.current)} contra ${moneyText(spike.baseline)}.`,
+        value:above,
+      });
+    }
 
     if (income > 0 && balance < 0) {
       items.push({
@@ -302,7 +420,7 @@ export class FinanceRepository {
       spent,
       balance,
       previousSpent,
-      items:items.slice(0,6),
+      items:items.slice(0,8),
     };
   }
 

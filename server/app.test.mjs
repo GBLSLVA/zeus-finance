@@ -357,6 +357,46 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
   }
 });
 
+test('Insights: detecta duplicidade, gasto fora do padrão e alta de categoria', async () => {
+  const dir = mkdtempSync(join(tmpdir(),'zeus-insights-'));
+  const path = join(dir,'insights.sqlite');
+  const db = new SqliteDatabase(path);
+  const repository = new FinanceRepository(db);
+  const auth = new AuthService(repository);
+
+  try {
+    const account = await auth.login({
+      email:'insights@example.com',
+      password:'secure-insights-password-123',
+    },true,'insights-test');
+
+    const user = account.user.id;
+    await repository.add(user,'transactions',{name:'Mercado base junho',category:'Comida',value:100,transactionDate:'2026-06-10'});
+    await repository.add(user,'transactions',{name:'Mercado base julho',category:'Comida',value:120,transactionDate:'2026-07-10'});
+    await repository.add(user,'transactions',{name:'Mercado base agosto',category:'Comida',value:80,transactionDate:'2026-08-10'});
+    await repository.add(user,'transactions',{name:'iFood jantar',category:'Comida',value:300,transactionDate:'2026-09-10'});
+    await repository.add(user,'transactions',{name:'iFood jantar',category:'Comida',value:300,transactionDate:'2026-09-10'});
+
+    const insights = await repository.insights(user,'2026-09');
+    assert.ok(insights.items.some(item => item.id === 'possible-duplicate'));
+    assert.ok(insights.items.some(item => item.id === 'unusual-transaction'));
+    assert.ok(insights.items.some(item => item.id === 'category-spike'));
+
+    const second = await auth.login({
+      email:'insights-second@example.com',
+      password:'secure-insights-password-456',
+    },true,'insights-test');
+
+    const isolated = await repository.insights(second.user.id,'2026-09');
+    assert.equal(isolated.items.some(item => item.id === 'possible-duplicate'),false);
+    assert.equal(isolated.items.some(item => item.id === 'unusual-transaction'),false);
+    assert.equal(isolated.items.some(item => item.id === 'category-spike'),false);
+  } finally {
+    await db.close();
+    rmSync(dir,{recursive:true,force:true});
+  }
+});
+
 test('Auth: login válido não acumula bloqueio e limite é isolado por e-mail', async () => {
   const dir = mkdtempSync(join(tmpdir(),'zeus-auth-'));
   const path = join(dir,'auth.sqlite');
