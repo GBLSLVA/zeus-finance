@@ -74,7 +74,6 @@ export function GoalsPage({
         <section className="panel records-panel">
           <div className="panel__header records-panel__header">
             <div>
-              <span className="panel__eyebrow">OBJETIVOS</span>
               <h2>Metas financeiras</h2>
             </div>
             <span className="records-count">{goals.length} {goals.length === 1 ? 'item' : 'itens'}</span>
@@ -139,7 +138,6 @@ export function GoalsPage({
         </section>
 
         <aside className="panel record-form-panel">
-          <span className="panel__eyebrow">{editingGoal ? 'EDITAR META' : 'NOVA META'}</span>
           <h2>{editingGoal ? 'Atualizar objetivo' : 'Adicionar meta'}</h2>
           <p>
             {editingGoal
@@ -188,8 +186,7 @@ export function GoalsPage({
         <section className="panel payments-panel goal-movements-panel">
           <div className="panel__header">
             <div>
-              <span className="panel__eyebrow">HISTÓRICO DA META</span>
-              <h2>{selectedGoal.name}</h2>
+              <h2>Movimentações de {selectedGoal.name}</h2>
               <p>{money(selectedGoal.saved)} reservados de {money(selectedGoal.target)}</p>
             </div>
             <button className="link-button" onClick={onCloseMovements}>Fechar</button>
