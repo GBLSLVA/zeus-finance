@@ -36,6 +36,7 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     const first = await call('register','POST',{email:'a@example.com',password:'secure-password-123'});
     assert.equal(first.status,200);
     assert.ok(first.cookie);
+    assert.equal((await call('register','POST',{email:'a@example.com',password:'another-secure-password-123'})).status,409);
     assert.equal((await call('login','POST',{email:'a@example.com',password:'wrong-password-123'})).status,401);
 
     const added = await call('transactions','POST',{
@@ -506,6 +507,39 @@ test('PostgreSQL: serializa pagamentos concorrentes sem ultrapassar o saldo', {s
       await database.query('DELETE FROM debts WHERE user_id=?',[userId]);
       await database.query('DELETE FROM users WHERE id=?',[userId]);
     }
+    await database.close();
+  }
+});
+
+test('PostgreSQL: cadastro concorrente do mesmo e-mail retorna conflito sem duplicar usuário', {skip: !process.env.TEST_DATABASE_URL}, async () => {
+  const database = new PostgresDatabase(process.env.TEST_DATABASE_URL);
+  await database.init();
+  const repository = new FinanceRepository(database);
+  const email = `postgres-register-race-${Date.now()}@example.com`;
+  const password = 'secure-postgres-password-123';
+
+  try {
+    const firstAuth = new AuthService(repository);
+    const secondAuth = new AuthService(repository);
+    const results = await Promise.allSettled([
+      firstAuth.login({email,password},true,'register-race-a'),
+      secondAuth.login({email,password},true,'register-race-b'),
+    ]);
+
+    const fulfilled = results.filter(result => result.status === 'fulfilled');
+    const rejected = results.filter(result => result.status === 'rejected');
+
+    assert.equal(fulfilled.length,1);
+    assert.equal(rejected.length,1);
+    assert.equal(rejected[0].reason.status,409);
+
+    const users = (await database.query('SELECT id,email FROM users WHERE email=?',[email])).recordset;
+    assert.equal(users.length,1);
+    assert.equal(users[0].email,email);
+
+    await database.query('DELETE FROM sessions WHERE user_id=?',[users[0].id]);
+    await database.query('DELETE FROM users WHERE id=?',[users[0].id]);
+  } finally {
     await database.close();
   }
 });
