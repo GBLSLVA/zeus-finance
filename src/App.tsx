@@ -253,6 +253,9 @@ export function App() {
       setBudgets([])
       setSelectedMonth(currentMonthKey())
       setView('overview')
+      setPasswordOpen(false)
+      setPasswordError('')
+      setPasswordChanged(false)
       setError('Sua sessão expirou. Entre novamente.')
     }
 
