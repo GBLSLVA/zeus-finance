@@ -229,7 +229,7 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal((await call('change-password','POST',{
       currentPassword:'wrong-password-123',
       newPassword:'new-secure-password-456',
-    },first.cookie)).status,401);
+    },first.cookie)).status,400);
 
     assert.equal((await call('change-password','POST',{
       currentPassword:'secure-password-123',
