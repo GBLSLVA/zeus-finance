@@ -114,7 +114,7 @@ type Dashboard = {
   extras: number
   income: number
   balance: number
-  recurringExpenses: Array<RecurringExpense & { scheduledDate: string }>
+  recurringExpenses: Array<RecurringExpense & { scheduledDate: string; paid: boolean }>
   recurringTotal: number
   projectedSpent: number
   projectedBalance: number
@@ -863,6 +863,24 @@ export function App() {
     }
   }
 
+  async function markRecurringExpensePaid(id: number) {
+    setBusy(true)
+    setError('')
+    try {
+      const entry = await api.request<Entry>(`recurring-expenses/${id}/payments`, 'POST', {
+        month: selectedMonth,
+      })
+      setData(current => ({
+        ...current,
+        transactions: [entry, ...current.transactions],
+      }))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function openDebtPayments(debtId: number) {
     setBusy(true)
     setError('')
@@ -1147,7 +1165,7 @@ export function App() {
           )}
         </header>
 
-        {(view === 'overview' || view === 'budgets') && (
+        {(view === 'overview' || view === 'budgets' || view === 'recurring') && (
           <div className="period-toolbar" aria-label="Selecionar período">
             <button className="period-button" onClick={() => setSelectedMonth(current => shiftMonthKey(current, -1))} aria-label="Mês anterior">‹</button>
             <div className="period-toolbar__current">
@@ -1556,9 +1574,9 @@ export function App() {
           <div className="recurring-page">
             <section className="budget-summary-grid" aria-label="Resumo dos gastos recorrentes">
               <MetricCard
-                label="Compromissos do mês"
+                label="Recorrências pendentes"
                 value={money(dashboard.recurringTotal)}
-                detail={dashboard.recurringExpenses.length ? `${dashboard.recurringExpenses.length} recorrência${dashboard.recurringExpenses.length === 1 ? '' : 's'} vigente${dashboard.recurringExpenses.length === 1 ? '' : 's'} em ${monthLabel.toLowerCase()}` : 'Nenhum compromisso recorrente ativo no período'}
+                detail={dashboard.recurringExpenses.length ? `${dashboard.recurringExpenses.filter(item => !item.paid).length} de ${dashboard.recurringExpenses.length} compromisso${dashboard.recurringExpenses.length === 1 ? '' : 's'} ainda pendente${dashboard.recurringExpenses.filter(item => !item.paid).length === 1 ? '' : 's'} em ${monthLabel.toLowerCase()}` : 'Nenhum compromisso recorrente ativo no período'}
                 icon="budget"
               />
               <MetricCard
@@ -1589,7 +1607,7 @@ export function App() {
                 <div className="table-wrap">
                   <table>
                     <thead>
-                      <tr><th>Descrição</th><th>Vencimento / vigência</th><th>Valor</th><th className="table-action">Ação</th></tr>
+                      <tr><th>Descrição</th><th>Vencimento / vigência</th><th>Status no mês</th><th>Valor</th><th className="table-action">Ação</th></tr>
                     </thead>
                     <tbody>
                       {recurringExpenses.map(entry => (
@@ -1608,6 +1626,17 @@ export function App() {
                             <small className="income-date">
                               {new Date(entry.activeFrom + 'T12:00:00').toLocaleDateString('pt-BR')} → {entry.activeUntil ? new Date(entry.activeUntil + 'T12:00:00').toLocaleDateString('pt-BR') : 'atual'}
                             </small>
+                          </td>
+                          <td>
+                            {dashboard.recurringExpenses.find(item => item.id === entry.id)?.paid ? (
+                              <span className="debt-status debt-status--paid">Pago</span>
+                            ) : dashboard.recurringExpenses.some(item => item.id === entry.id) ? (
+                              <button className="secondary-button recurring-pay-button" disabled={busy} onClick={() => markRecurringExpensePaid(entry.id)}>
+                                Marcar como pago
+                              </button>
+                            ) : (
+                              <span className="debt-status">Fora da vigência</span>
+                            )}
                           </td>
                           <td><strong className="table-value">{money(entry.value)}</strong></td>
                           <td className="table-action">
@@ -1633,7 +1662,7 @@ export function App() {
                       ))}
                       {!recurringExpenses.length && (
                         <tr>
-                          <td colSpan={4} className="table-empty">
+                          <td colSpan={5} className="table-empty">
                             <div className="empty-block__icon"><Icon name="calendar" size={22} /></div>
                             <strong>Nenhum gasto recorrente cadastrado.</strong>
                             <span>Cadastre aluguel, internet, academia, assinaturas e outros compromissos mensais.</span>
