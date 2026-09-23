@@ -175,13 +175,16 @@ Responsabilidades:
 
 - **ApiClient:** chamadas HTTP da interface.
 - **FinanceApi:** roteamento, validação de origem e respostas HTTP.
-- **FinanceRepository:** fachada atual das regras financeiras; será decomposta por domínio nas próximas refatorações.
+- **FinanceRepository:** fachada das regras financeiras, preservando compatibilidade enquanto os domínios são extraídos gradualmente.
 - **UserRepository:** persistência de usuários, credenciais e sessões.
+- **IncomeRepository:** persistência e validação de receitas recorrentes e extras.
+- **BudgetRepository:** persistência e validação de orçamentos mensais por categoria.
 - **AuthService:** regras de cadastro, login, troca de senha, sessões e proteção contra tentativas excessivas; não executa SQL diretamente.
 - **DatabaseAdapter:** contrato comum da camada de persistência.
 - **SqliteDatabase / PostgresDatabase:** implementações polimórficas do contrato de banco.
 - **src/domain/finance.ts:** tipos e constantes do domínio financeiro usados pelo frontend.
 - **src/utils/finance.ts:** formatação e utilitários de datas/percentuais.
+- **server/domain/finance-values.mjs:** validações e normalizadores compartilhados do domínio financeiro.
 - **src/components:** componentes visuais reutilizáveis do React.
 
 O projeto usa POO principalmente no backend/domínio e composição funcional no React. Herança é usada apenas onde existe relação de subtipo clara; composição e injeção de dependências são preferidas para evitar acoplamento.
