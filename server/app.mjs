@@ -456,13 +456,18 @@ export class AuthService {
       throw new HttpError(429, 'Muitas tentativas. Aguarde dez minutos.');
     }
 
-    let user = (await this.db.query('SELECT * FROM users WHERE email=?', [email])).recordset[0];
+    let user;
     if (register) {
-      if (user) throw new HttpError(409, 'Não foi possível cadastrar este e-mail.');
       const password = createPasswordHash(data.password);
-      const result = await this.db.query('INSERT INTO users(email,password) VALUES(?,?) RETURNING id', [email, password]);
-      user = {id: result.recordset[0].id, email};
+      const result = await this.db.query(
+        'INSERT INTO users(email,password) VALUES(?,?) ON CONFLICT(email) DO NOTHING RETURNING id',
+        [email,password],
+      );
+      const created = result.recordset[0];
+      if (!created) throw new HttpError(409, 'Não foi possível cadastrar este e-mail.');
+      user = {id:created.id,email};
     } else {
+      user = (await this.db.query('SELECT * FROM users WHERE email=?', [email])).recordset[0];
       const valid = verifyPassword(data.password, user?.password);
       if (!user || !valid) {
         this.registerFailedLogin(attemptKey, now);
