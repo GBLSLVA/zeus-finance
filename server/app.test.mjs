@@ -195,6 +195,21 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
 
     const second = await call('register','POST',{email:'b@example.com',password:'secure-password-456'});
     assert.deepEqual((await call('transactions','GET',undefined,second.cookie)).data,[]);
+
+    const disposable = await call('register','POST',{email:'delete-me@example.com',password:'delete-secure-password-123'});
+    assert.equal(disposable.status,200);
+    assert.equal((await call('delete-account','POST',{
+      password:'wrong-password-123',
+      confirmation:'EXCLUIR',
+    },disposable.cookie)).status,400);
+    const deletedAccount = await call('delete-account','POST',{
+      password:'delete-secure-password-123',
+      confirmation:'EXCLUIR',
+    },disposable.cookie);
+    assert.equal(deletedAccount.status,200);
+    assert.equal(deletedAccount.data.deleted,true);
+    assert.equal(deletedAccount.cookie,'zeus_session=');
+    assert.equal((await call('me','GET',undefined,disposable.cookie)).status,401);
     assert.deepEqual((await call('incomes','GET',undefined,second.cookie)).data,[]);
     assert.deepEqual((await call('budgets?month=2026-09','GET',undefined,second.cookie)).data,[]);
     assert.equal((await call(`budgets/${foodBudget.data.id}`,'DELETE',undefined,second.cookie)).status,404);
@@ -305,6 +320,97 @@ test('Auth: login válido não acumula bloqueio e limite é isolado por e-mail',
 
     const otherUser = await auth.login({email:'rate-b@example.com',password},false,'shared-ip');
     assert.equal(otherUser.user.email,'rate-b@example.com');
+  } finally {
+    await db.close();
+    rmSync(dir,{recursive:true,force:true});
+  }
+});
+
+test('Conta: exclusão remove dados próprios e preserva outro usuário', async () => {
+  const dir = mkdtempSync(join(tmpdir(),'zeus-delete-account-'));
+  const path = join(dir,'account.sqlite');
+  const db = new SqliteDatabase(path);
+  const repository = new FinanceRepository(db);
+  const auth = new AuthService(repository);
+
+  try {
+    const owner = await auth.login({
+      email:'owner-delete@example.com',
+      password:'owner-secure-password-123',
+    },true,'delete-owner');
+    const other = await auth.login({
+      email:'other-delete@example.com',
+      password:'other-secure-password-123',
+    },true,'delete-other');
+
+    await repository.add(owner.user.id,'transactions',{
+      name:'Mercado',
+      category:'Comida',
+      value:100,
+      transactionDate:'2026-09-10',
+    });
+    await repository.add(owner.user.id,'goals',{
+      name:'Reserva',
+      target:2000,
+      saved:500,
+    });
+    await repository.addIncome(owner.user.id,{
+      name:'Salário',
+      type:'salary',
+      value:3500,
+      activeFrom:'2026-01-01',
+      active:true,
+    });
+    const debt = await repository.addDebt(owner.user.id,{
+      name:'Cartão',
+      creditor:'Banco',
+      originalAmount:500,
+      interestRate:0,
+      installmentsTotal:5,
+      dueDay:10,
+    });
+    await repository.addDebtPayment(owner.user.id,debt.id,{
+      amount:100,
+      paymentDate:'2026-09-10',
+      countsAsInstallment:true,
+    });
+    await repository.upsertBudget(owner.user.id,{
+      month:'2026-09',
+      category:'Comida',
+      limit:700,
+    });
+
+    await repository.add(other.user.id,'transactions',{
+      name:'Outro usuário',
+      category:'Casa',
+      value:50,
+      transactionDate:'2026-09-10',
+    });
+
+    await assert.rejects(
+      auth.deleteAccount(owner.user.id,{password:'wrong-password-123',confirmation:'EXCLUIR'}),
+      error => error.status === 400,
+    );
+
+    await auth.deleteAccount(owner.user.id,{
+      password:'owner-secure-password-123',
+      confirmation:'EXCLUIR',
+    });
+
+    for (const table of ['sessions','entries','incomes','debts','debt_payments','budgets']) {
+      const count = (await db.query(`SELECT COUNT(*) AS total FROM ${table} WHERE user_id=?`,[owner.user.id])).recordset[0].total;
+      assert.equal(count,0,`${table} ainda possui dados do usuário excluído`);
+    }
+
+    const ownerRow = (await db.query('SELECT id FROM users WHERE id=?',[owner.user.id])).recordset[0];
+    assert.equal(ownerRow,undefined);
+    await assert.rejects(auth.authenticate(owner.token), error => error.status === 401);
+
+    const otherRow = (await db.query('SELECT id FROM users WHERE id=?',[other.user.id])).recordset[0];
+    assert.equal(otherRow.id,other.user.id);
+    const otherEntries = await repository.list(other.user.id,'transactions');
+    assert.equal(otherEntries.length,1);
+    assert.equal(otherEntries[0].name,'Outro usuário');
   } finally {
     await db.close();
     rmSync(dir,{recursive:true,force:true});

@@ -195,6 +195,12 @@ svg {
   color: #ffb2b7;
 }
 
+.alert--success {
+  border: 1px solid rgba(88, 214, 163, 0.3);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 /* Loading */
 
 .loading-screen {
@@ -594,6 +600,14 @@ svg {
   color: var(--accent);
 }
 
+.delete-account-button {
+  margin-bottom: 2px;
+}
+
+.delete-account-button:hover {
+  color: var(--red);
+}
+
 .security-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -727,6 +741,60 @@ svg {
   grid-column: 1 / -1;
   justify-self: start;
   margin-top: 4px;
+}
+
+.security-modal--danger {
+  border-color: rgba(255, 143, 150, 0.32);
+}
+
+.danger-eyebrow {
+  color: var(--red);
+}
+
+.danger-warning {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 14px;
+  border: 1px solid rgba(255, 143, 150, 0.28);
+  border-radius: var(--radius-md);
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.danger-warning strong,
+.danger-warning span {
+  display: block;
+}
+
+.danger-warning strong {
+  color: #ffd0d3;
+  font-size: 13px;
+}
+
+.danger-warning span {
+  margin-top: 3px;
+  color: #d9a5aa;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.danger-button {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--red);
+  color: #1b090b;
+  font-weight: 780;
+}
+
+.danger-button:hover:not(:disabled) {
+  filter: brightness(1.05);
 }
 
 .workspace {

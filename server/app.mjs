@@ -505,6 +505,31 @@ export class AuthService {
     });
   }
 
+  async deleteAccount(userId, data) {
+    if (typeof data.password !== 'string' || data.password.length < 12 || data.password.length > 128) {
+      throw new HttpError(400, 'Senha inválida.');
+    }
+    if (data.confirmation !== 'EXCLUIR') {
+      throw new HttpError(400, 'Digite EXCLUIR para confirmar a remoção da conta.');
+    }
+
+    const user = (await this.db.query('SELECT id,password FROM users WHERE id=?', [userId])).recordset[0];
+    if (!user || !verifyPassword(data.password,user.password)) {
+      throw new HttpError(400, 'Senha incorreta.');
+    }
+
+    await this.db.transaction(async database => {
+      await database.query('DELETE FROM debt_payments WHERE user_id=?', [userId]);
+      await database.query('DELETE FROM debts WHERE user_id=?', [userId]);
+      await database.query('DELETE FROM budgets WHERE user_id=?', [userId]);
+      await database.query('DELETE FROM entries WHERE user_id=?', [userId]);
+      await database.query('DELETE FROM incomes WHERE user_id=?', [userId]);
+      await database.query('DELETE FROM sessions WHERE user_id=?', [userId]);
+      const result = await database.query('DELETE FROM users WHERE id=?', [userId]);
+      if (!result.rowsAffected[0]) throw new HttpError(404, 'Conta não encontrada.');
+    });
+  }
+
   async logout(token) { await this.db.query('DELETE FROM sessions WHERE token=?', [digest(token)]); }
 }
 
@@ -599,6 +624,10 @@ export class FinanceApi {
       if (path === '/api/change-password' && req.method === 'POST') {
         await this.auth.changePassword(user,token,await this.body(req));
         return send(200,{});
+      }
+      if (path === '/api/delete-account' && req.method === 'POST') {
+        await this.auth.deleteAccount(user,await this.body(req));
+        return send(200,{deleted:true},{'Set-Cookie':`zeus_session=; HttpOnly; SameSite=Strict; Path=/api; Max-Age=0${secure}`});
       }
 
       if (path === '/api/budgets') {
