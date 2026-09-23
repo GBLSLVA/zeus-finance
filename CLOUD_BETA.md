@@ -46,7 +46,7 @@ No primeiro start:
 2. como `NODE_ENV=production`, o launcher carrega `server/production.mjs`;
 3. `openDatabase()` detecta `DATABASE_URL`;
 4. o adaptador PostgreSQL conecta no Supabase;
-5. as migrations 1–6 são aplicadas;
+5. as migrations 1–7 são aplicadas;
 6. o health check confirma aplicação + banco;
 7. o domínio `*.onrender.com` fica disponível.
 

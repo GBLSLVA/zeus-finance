@@ -3086,3 +3086,27 @@ tbody tr:hover td {
     width: 100%;
   }
 }
+
+
+/* Gastos recorrentes */
+.recurring-page .records-layout {
+  align-items: start;
+}
+
+.recurring-pay-button {
+  min-height: 2.2rem;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.recurring-page .income-date {
+  display: block;
+  margin-top: 0.3rem;
+}
+
+@media (max-width: 720px) {
+  .recurring-pay-button {
+    width: 100%;
+  }
+}

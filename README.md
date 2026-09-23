@@ -15,6 +15,8 @@ Funcionalidades principais:
 - Exportação completa dos dados da conta em backup JSON isolado por usuário.
 - Cadastro, edição, listagem e exclusão de gastos, dívidas, metas e receitas.
 - Salários recorrentes com período de vigência e status ativo/inativo.
+- Gastos recorrentes com categoria, valor mensal, dia de vencimento, vigência e status ativo/inativo.
+- Registro de pagamento mensal da recorrência, convertendo o compromisso pendente em gasto real sem dupla contagem.
 - Rendas extras por data de recebimento.
 - Gastos com data financeira própria, independente da data de cadastro.
 - Dashboard com receita mensal, salário, extras, gastos, saldo estimado, dívida total e metas.
@@ -61,6 +63,7 @@ Funcionalidades principais:
 - **Orçamento mensal:** cada categoria pode ter um limite independente para cada mês.
 - **Uso do orçamento:** calculado apenas sobre categorias que possuem limite definido, evitando comparar orçamento parcial com gastos sem limite.
 - **Histórico mensal:** receitas e gastos são recalculados pela data financeira de cada lançamento e pela vigência histórica dos salários.
+- **Projeção recorrente:** compromissos mensais ficam separados dos gastos já realizados e alimentam o saldo projetado sem falsificar o histórico pago. Ao marcar uma recorrência como paga, ela vira um gasto real daquele mês e deixa de compor o valor pendente.
 
 ## Banco e migrations
 
@@ -77,7 +80,8 @@ Migrações atuais:
 3. recorrência, vigência e status de receitas;
 4. dívidas estruturadas e histórico de pagamentos, com migração automática das dívidas antigas;
 5. orçamentos mensais por categoria;
-6. proteção para impedir valor reservado de meta acima do valor alvo.
+6. proteção para impedir valor reservado de meta acima do valor alvo;
+7. gastos recorrentes com vigência e vencimento mensal.
 
 Bases criadas por versões anteriores são atualizadas automaticamente ao iniciar o servidor.
 
@@ -196,7 +200,6 @@ Prioridades seguintes:
 - resumo financeiro semanal e mensal;
 - ampliar o assistente conversacional com histórico de perguntas e linguagem natural mais flexível;
 - movimentações de metas;
-- gastos recorrentes;
 - categorias personalizadas;
 - exportação CSV/PDF;
 - restauração de backup JSON;
