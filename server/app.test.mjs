@@ -218,6 +218,43 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal((await call(`budgets/${transportBudget.data.id}`,'DELETE',undefined,first.cookie)).status,200);
     assert.equal((await call('budgets?month=2026-09','GET',undefined,first.cookie)).data.length,1);
     assert.equal((await call(`incomes/${extra.data.id}`,'DELETE',undefined,first.cookie)).status,200);
+
+    const alternateSession = await call('login','POST',{
+      email:'a@example.com',
+      password:'secure-password-123',
+    });
+    assert.equal(alternateSession.status,200);
+    assert.ok(alternateSession.cookie);
+
+    assert.equal((await call('change-password','POST',{
+      currentPassword:'wrong-password-123',
+      newPassword:'new-secure-password-456',
+    },first.cookie)).status,401);
+
+    assert.equal((await call('change-password','POST',{
+      currentPassword:'secure-password-123',
+      newPassword:'secure-password-123',
+    },first.cookie)).status,400);
+
+    const passwordChanged = await call('change-password','POST',{
+      currentPassword:'secure-password-123',
+      newPassword:'new-secure-password-456',
+    },first.cookie);
+    assert.equal(passwordChanged.status,200);
+
+    assert.equal((await call('me','GET',undefined,first.cookie)).status,200);
+    assert.equal((await call('me','GET',undefined,alternateSession.cookie)).status,401);
+    assert.equal((await call('login','POST',{
+      email:'a@example.com',
+      password:'secure-password-123',
+    })).status,401);
+
+    const relogged = await call('login','POST',{
+      email:'a@example.com',
+      password:'new-secure-password-456',
+    });
+    assert.equal(relogged.status,200);
+
     await call('logout','POST',undefined,first.cookie);
     assert.equal((await call('me','GET',undefined,first.cookie)).status,401);
   } finally {
