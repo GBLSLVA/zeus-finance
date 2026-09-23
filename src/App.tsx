@@ -132,7 +132,8 @@ const formatMonth = (monthKey: string) => {
     .replace(/^./, letter => letter.toUpperCase())
 }
 
-const percent = (value: number) => `${Math.round(Math.max(0, Math.min(100, value)))}%`
+const percent = (value: number) => `${Math.round(Math.max(0, value))}%`
+const progressPercent = (value: number) => `${Math.round(Math.max(0, Math.min(100, value)))}%`
 
 const effectiveIncomeEnd = (entry: Income) =>
   entry.activeUntil ?? (!entry.active ? entry.updatedAt?.slice(0, 10) || entry.activeFrom : null)
@@ -1179,7 +1180,7 @@ export function App() {
                       </div>
                     </div>
                     <div className="progress-track budget-total-progress">
-                      <span style={{ width: percent(dashboard.budgetUsage) }} />
+                      <span style={{ width: progressPercent(dashboard.budgetUsage) }} />
                     </div>
                     <div className="budget-overview__footer">
                       <span>{percent(dashboard.budgetUsage)} dos limites consumidos</span>
@@ -1268,7 +1269,7 @@ export function App() {
                       <strong className="goal-overview__percent">{percent(dashboard.goalProgress)}</strong>
                     </div>
                     <div className="progress-track">
-                      <span style={{ width: percent(dashboard.goalProgress) }} />
+                      <span style={{ width: progressPercent(dashboard.goalProgress) }} />
                     </div>
                     <div className="goal-overview__footer">
                       <span>Objetivo total</span>
@@ -1384,7 +1385,7 @@ export function App() {
                   </div>
 
                   <div className="progress-track budget-category-progress">
-                    <span style={{ width: item.limit > 0 ? percent(item.usage) : '0%' }} />
+                    <span style={{ width: item.limit > 0 ? progressPercent(item.usage) : '0%' }} />
                   </div>
                   <div className="budget-category-card__usage">
                     <span>{item.limit > 0 ? `${percent(item.usage)} utilizado` : 'Defina um limite abaixo'}</span>
@@ -1457,7 +1458,7 @@ export function App() {
                           <div><span>Saldo atual</span><strong>{money(debt.currentBalance)}</strong></div>
                         </div>
 
-                        <div className="progress-track debt-progress"><span style={{ width: percent(progress) }} /></div>
+                        <div className="progress-track debt-progress"><span style={{ width: progressPercent(progress) }} /></div>
 
                         <div className="debt-card__meta">
                           <span>{percent(progress)} quitado</span>
