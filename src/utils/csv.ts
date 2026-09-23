@@ -31,6 +31,11 @@ const csvCell = (value: unknown) => {
   return `"${text.replaceAll('"', '""')}"`
 }
 
+const safeUserText = (value: string) => {
+  const text = String(value ?? '')
+  return /^(?:[=+@]|-[^0-9]|\t|\r)/.test(text) ? `'${text}` : text
+}
+
 const numberPtBr = (value: number) =>
   Number(value).toLocaleString('pt-BR', {
     minimumFractionDigits: 2,
@@ -59,8 +64,8 @@ export function buildFinanceCsv(backup: FinanceBackup) {
       'gasto',
       entry.id,
       entry.transactionDate,
-      entry.name,
-      entry.category,
+      safeUserText(entry.name),
+      safeUserText(entry.category),
       numberPtBr(entry.value),
       '',
       '',
@@ -74,7 +79,7 @@ export function buildFinanceCsv(backup: FinanceBackup) {
       'receita',
       income.id,
       income.type === 'extra' ? income.receivedAt?.slice(0, 10) : income.activeFrom,
-      income.name,
+      safeUserText(income.name),
       '',
       numberPtBr(income.value),
       income.type,
@@ -91,13 +96,13 @@ export function buildFinanceCsv(backup: FinanceBackup) {
       'divida',
       debt.id,
       debt.transactionDate,
-      debt.name,
+      safeUserText(debt.name),
       '',
       numberPtBr(debt.currentBalance),
       'saldo_devedor',
       debt.status,
       `original=${numberPtBr(debt.originalAmount)} | pago=${numberPtBr(debt.paidAmount)} | parcelas=${debt.installmentsPaid}/${debt.installmentsTotal}`,
-      debt.creditor,
+      safeUserText(debt.creditor),
     ])
   }
 
@@ -112,7 +117,7 @@ export function buildFinanceCsv(backup: FinanceBackup) {
       payment.countsAsInstallment ? 'parcela' : 'abatimento',
       '',
       `divida_id=${payment.debtId}`,
-      payment.note,
+      safeUserText(payment.note),
     ])
   }
 
@@ -121,7 +126,7 @@ export function buildFinanceCsv(backup: FinanceBackup) {
       'meta',
       goal.id,
       goal.createdAt?.slice(0, 10),
-      goal.name,
+      safeUserText(goal.name),
       '',
       numberPtBr(goal.saved),
       'saldo_reservado',
@@ -142,7 +147,7 @@ export function buildFinanceCsv(backup: FinanceBackup) {
       movement.type,
       '',
       `meta_id=${movement.goalId}`,
-      movement.note,
+      safeUserText(movement.note),
     ])
   }
 
@@ -166,8 +171,8 @@ export function buildFinanceCsv(backup: FinanceBackup) {
       'recorrente',
       recurring.id,
       recurring.activeFrom,
-      recurring.name,
-      recurring.category,
+      safeUserText(recurring.name),
+      safeUserText(recurring.category),
       numberPtBr(recurring.value),
       'compromisso_mensal',
       recurring.active ? 'ativo' : 'inativo',
