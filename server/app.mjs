@@ -1091,38 +1091,45 @@ export class FinanceRepository {
 
   async recordRecurringExpensePayment(user, id, data) {
     const monthKey = monthOnly(data.month);
-    const recurring = (await this.db.query(
-      'SELECT * FROM recurring_expenses WHERE user_id=? AND id=?',
-      [user,id],
-    )).recordset[0];
-    if (!recurring) throw new HttpError(404, 'Gasto recorrente não encontrado.');
+    return this.db.transaction(async database => {
+      const lock = database.kind === 'postgres' ? ' FOR UPDATE' : '';
+      const recurring = (await database.query(
+        `SELECT * FROM recurring_expenses WHERE user_id=? AND id=?${lock}`,
+        [user,id],
+      )).recordset[0];
+      if (!recurring) throw new HttpError(404, 'Gasto recorrente não encontrado.');
 
-    const item = normalizeRecurringExpense(recurring);
-    const {start:monthStart,end:monthEnd} = monthBounds(monthKey);
-    const activeUntil = effectiveRecurringEnd(item);
-    if (item.activeFrom > monthEnd || (activeUntil && activeUntil < monthStart)) {
-      throw new HttpError(400, 'Este gasto recorrente não está vigente no mês informado.');
-    }
+      const item = normalizeRecurringExpense(recurring);
+      const {start:monthStart,end:monthEnd} = monthBounds(monthKey);
+      const activeUntil = effectiveRecurringEnd(item);
+      if (item.activeFrom > monthEnd || (activeUntil && activeUntil < monthStart)) {
+        throw new HttpError(400, 'Este gasto recorrente não está vigente no mês informado.');
+      }
 
-    const existing = (await this.db.query(
-      'SELECT id FROM entries WHERE user_id=? AND recurring_expense_id=? AND recurring_month=?',
-      [user,id,monthKey],
-    )).recordset[0];
-    if (existing) throw new HttpError(409, 'Este gasto recorrente já foi registrado como pago neste mês.');
+      const existing = (await database.query(
+        'SELECT id FROM entries WHERE user_id=? AND recurring_expense_id=? AND recurring_month=?',
+        [user,id,monthKey],
+      )).recordset[0];
+      if (existing) throw new HttpError(409, 'Este gasto recorrente já foi registrado como pago neste mês.');
 
-    const lastDay = Number(monthEnd.slice(8,10));
-    const scheduledDay = Math.min(item.dueDay,lastDay);
-    const scheduledDate = `${monthKey}-${String(scheduledDay).padStart(2,'0')}`;
-    const paymentDate = dateOnly(data.paymentDate ?? scheduledDate);
-    if (paymentDate.slice(0,7) !== monthKey) {
-      throw new HttpError(400, 'A data de pagamento deve pertencer ao mês selecionado.');
-    }
+      const lastDay = Number(monthEnd.slice(8,10));
+      const scheduledDay = Math.min(item.dueDay,lastDay);
+      const scheduledDate = `${monthKey}-${String(scheduledDay).padStart(2,'0')}`;
+      const paymentDate = dateOnly(data.paymentDate ?? scheduledDate);
+      if (paymentDate.slice(0,7) !== monthKey) {
+        throw new HttpError(400, 'A data de pagamento deve pertencer ao mês selecionado.');
+      }
 
-    const result = await this.db.query(
-      'INSERT INTO entries(user_id,kind,name,category,amount,saved,transaction_date,updated_at,recurring_expense_id,recurring_month) VALUES(?,?,?,?,?,0,?,CURRENT_TIMESTAMP,?,?) RETURNING id',
-      [user,'transactions',item.name,item.category,cents(item.value),paymentDate,id,monthKey],
-    );
-    return (await this.list(user,'transactions')).find(entry => entry.id === result.recordset[0].id);
+      const result = await database.query(
+        'INSERT INTO entries(user_id,kind,name,category,amount,saved,transaction_date,updated_at,recurring_expense_id,recurring_month) VALUES(?,?,?,?,?,0,?,CURRENT_TIMESTAMP,?,?) RETURNING id',
+        [user,'transactions',item.name,item.category,cents(item.value),paymentDate,id,monthKey],
+      );
+      const row = (await database.query(
+        'SELECT * FROM entries WHERE user_id=? AND id=?',
+        [user,result.recordset[0].id],
+      )).recordset[0];
+      return normalizeEntry(row);
+    });
   }
 
   async exportUserData(user) {
