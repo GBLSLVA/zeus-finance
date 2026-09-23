@@ -72,6 +72,12 @@ async function serve(req,res) {
     res.writeHead(200,staticHeaders(target));
     res.end(body);
   } catch {
+    if (extname(relative)) {
+      res.writeHead(404,{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'});
+      res.end('Arquivo não encontrado');
+      return;
+    }
+
     try {
       const index = resolve(dist,'index.html');
       const body = await readFile(index);
