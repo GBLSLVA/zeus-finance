@@ -69,12 +69,19 @@ type Insight = {
   message: string
   value: number | null
 }
+type MonthlySummary = {
+  tone: InsightTone
+  title: string
+  message: string
+  highlights: string[]
+}
 type InsightsResponse = {
   month: string
   income: number
   spent: number
   balance: number
   previousSpent: number
+  summary: MonthlySummary
   items: Insight[]
 }
 
@@ -295,6 +302,7 @@ export function App() {
   const [deleteAccountBusy, setDeleteAccountBusy] = useState(false)
   const [deleteAccountError, setDeleteAccountError] = useState('')
   const [insights, setInsights] = useState<Insight[]>([])
+  const [monthlySummary, setMonthlySummary] = useState<MonthlySummary | null>(null)
   const [dashboard, setDashboard] = useState<Dashboard>(() => emptyDashboard(currentMonthKey()))
 
   const load = async () => {
@@ -338,13 +346,17 @@ export function App() {
   useEffect(() => {
     if (!user) {
       setInsights([])
+      setMonthlySummary(null)
       return
     }
 
     let active = true
     api.request<InsightsResponse>(`insights?month=${selectedMonth}`)
       .then(result => {
-        if (active) setInsights(result.items)
+        if (active) {
+          setInsights(result.items)
+          setMonthlySummary(result.summary)
+        }
       })
       .catch(e => {
         if (active && (e as { status?: number }).status !== 401) {
@@ -392,6 +404,7 @@ export function App() {
       setDebtPayments([])
       setBudgets([])
       setInsights([])
+      setMonthlySummary(null)
       setDashboard(emptyDashboard(currentMonthKey()))
       setSelectedMonth(currentMonthKey())
       setView('overview')
@@ -446,6 +459,7 @@ export function App() {
       setDebtPayments([])
       setBudgets([])
       setInsights([])
+      setMonthlySummary(null)
       setDashboard(emptyDashboard(currentMonthKey()))
       setSelectedMonth(currentMonthKey())
       setView('overview')
@@ -561,6 +575,7 @@ export function App() {
       setDebtPayments([])
       setBudgets([])
       setInsights([])
+      setMonthlySummary(null)
       setDashboard(emptyDashboard(currentMonthKey()))
       setSelectedMonth(currentMonthKey())
       setView('overview')
@@ -1071,6 +1086,21 @@ export function App() {
                 </div>
                 <span className="insights-badge">Beta</span>
               </div>
+
+              {monthlySummary && (
+                <article className={`monthly-summary monthly-summary--${monthlySummary.tone}`}>
+                  <div className="monthly-summary__body">
+                    <span className="monthly-summary__label">RESUMO DO MÊS</span>
+                    <h3>{monthlySummary.title}</h3>
+                    <p>{monthlySummary.message}</p>
+                  </div>
+                  {monthlySummary.highlights.length > 0 && (
+                    <ul className="monthly-summary__highlights">
+                      {monthlySummary.highlights.map(highlight => <li key={highlight}>{highlight}</li>)}
+                    </ul>
+                  )}
+                </article>
+              )}
 
               <div className="insights-grid">
                 {insights.map(insight => (
