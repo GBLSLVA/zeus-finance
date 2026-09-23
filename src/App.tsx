@@ -228,6 +228,25 @@ export function App() {
       .catch(e => setError((e as Error).message))
   }, [user, selectedMonth])
 
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      if (!user) return
+      setUser(null)
+      setData({ transactions: [], debts: [], goals: [] })
+      setIncomes([])
+      setEditing(null)
+      setSelectedDebtId(null)
+      setDebtPayments([])
+      setBudgets([])
+      setSelectedMonth(currentMonthKey())
+      setView('overview')
+      setError('Sua sessão expirou. Entre novamente.')
+    }
+
+    window.addEventListener('zeus:unauthorized', handleUnauthorized)
+    return () => window.removeEventListener('zeus:unauthorized', handleUnauthorized)
+  }, [user])
+
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setBusy(true)
