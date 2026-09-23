@@ -12,7 +12,10 @@ import {
   today,
 } from './domain/finance-values.mjs';
 import { BudgetRepository } from './repositories/budget-repository.mjs';
+import { DebtRepository, normalizeDebt, normalizeDebtPayment } from './repositories/debt-repository.mjs';
+import { EntryRepository, normalizeEntry } from './repositories/entry-repository.mjs';
 import { IncomeRepository } from './repositories/income-repository.mjs';
+import { RecurringExpenseRepository, normalizeRecurringExpense } from './repositories/recurring-expense-repository.mjs';
 import { UserRepository } from './repositories/user-repository.mjs';
 
 export { HttpError } from './http-error.mjs';
@@ -78,69 +81,14 @@ const normalizeQuestion = value =>
     .replace(/\s+/g,' ')
     .trim();
 
-const normalizeEntry = row => ({
-  id: row.id,
-  name: row.name,
-  category: row.category,
-  value: row.amount / 100,
-  target: row.amount / 100,
-  saved: row.saved / 100,
-  transactionDate: row.transaction_date ?? row.created_at?.slice(0, 10),
-  createdAt: row.created_at,
-  updatedAt: row.updated_at ?? row.created_at,
-  recurringExpenseId: row.recurring_expense_id ?? null,
-  recurringMonth: row.recurring_month ?? null,
-});
-
-const normalizeDebt = row => ({
-  id: row.id,
-  name: row.name,
-  category: null,
-  value: row.current_balance / 100,
-  target: row.original_amount / 100,
-  saved: (row.original_amount - row.current_balance) / 100,
-  originalAmount: row.original_amount / 100,
-  currentBalance: row.current_balance / 100,
-  paidAmount: (row.original_amount - row.current_balance) / 100,
-  creditor: row.creditor ?? '',
-  interestRate: row.interest_rate_bps / 100,
-  installmentsTotal: row.installments_total,
-  installmentsPaid: row.installments_paid,
-  dueDay: row.due_day,
-  status: row.status,
-  transactionDate: row.created_at?.slice(0, 10),
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-});
-
-const normalizeDebtPayment = row => ({
-  id: row.id,
-  debtId: row.debt_id,
-  amount: row.amount / 100,
-  paymentDate: row.payment_date,
-  note: row.note ?? '',
-  countsAsInstallment: Boolean(row.counts_as_installment),
-  createdAt: row.created_at,
-});
-
-const normalizeRecurringExpense = row => ({
-  id: row.id,
-  name: row.name,
-  category: row.category,
-  value: row.amount / 100,
-  dueDay: row.due_day,
-  activeFrom: row.active_from,
-  activeUntil: row.active_until ?? null,
-  active: Boolean(row.active ?? 1),
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-});
-
 export class FinanceRepository {
   constructor(database) {
     this.db = database;
     this.users = new UserRepository(database);
+    this.entries = new EntryRepository(database);
+    this.debts = new DebtRepository(database);
     this.budgets = new BudgetRepository(database);
+    this.recurring = new RecurringExpenseRepository(database);
     this.incomes = new IncomeRepository(database);
   }
 
@@ -776,186 +724,63 @@ export class FinanceRepository {
   }
 
   async list(user, kind) {
-    if (kind === 'debts') return this.listDebts(user);
-    const result = await this.db.query(
-      'SELECT * FROM entries WHERE user_id=? AND kind=? ORDER BY COALESCE(transaction_date,substr(created_at,1,10)) DESC,id DESC',
-      [user, kind],
-    );
-    return result.recordset.map(normalizeEntry);
+    if (kind === 'debts') return this.debts.list(user);
+    return this.entries.list(user,kind);
   }
 
   async add(user, kind, data) {
-    if (kind === 'debts') return this.addDebt(user, data);
-    const name = text(data.name);
-    const amount = cents(kind === 'goals' ? data.target : data.value);
-    const category = kind === 'transactions' ? text(data.category) : null;
-    if (category && !categories.includes(category)) throw new HttpError(400, 'Categoria inválida.');
-    const saved = kind === 'goals' ? cents(data.saved ?? 0, true) : 0;
-    if (kind === 'goals' && saved > amount) throw new HttpError(400, 'O valor reservado não pode superar o valor alvo.');
-    const transactionDate = kind === 'transactions' ? dateOnly(data.transactionDate ?? today()) : null;
-    const result = await this.db.query(
-      'INSERT INTO entries(user_id,kind,name,category,amount,saved,transaction_date,updated_at) VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP) RETURNING id',
-      [user, kind, name, category, amount, saved, transactionDate],
-    );
-    return (await this.list(user, kind)).find(row => row.id === result.recordset[0].id);
+    if (kind === 'debts') return this.debts.add(user,data);
+    return this.entries.add(user,kind,data);
   }
 
   async update(user, kind, id, data) {
-    if (kind === 'debts') return this.updateDebt(user, id, data);
-    const name = text(data.name);
-    const amount = cents(kind === 'goals' ? data.target : data.value);
-    const category = kind === 'transactions' ? text(data.category) : null;
-    if (category && !categories.includes(category)) throw new HttpError(400, 'Categoria inválida.');
-    const saved = kind === 'goals' ? cents(data.saved ?? 0, true) : 0;
-    if (kind === 'goals' && saved > amount) throw new HttpError(400, 'O valor reservado não pode superar o valor alvo.');
-    const transactionDate = kind === 'transactions' ? dateOnly(data.transactionDate ?? today()) : null;
-    const result = await this.db.query(
-      'UPDATE entries SET name=?,category=?,amount=?,saved=?,transaction_date=COALESCE(?,transaction_date),updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND kind=? AND id=?',
-      [name, category, amount, saved, transactionDate, user, kind, id],
-    );
-    if (!result.rowsAffected[0]) throw new HttpError(404, 'Registro não encontrado.');
-    return (await this.list(user, kind)).find(row => row.id === id);
+    if (kind === 'debts') return this.debts.update(user,id,data);
+    return this.entries.update(user,kind,id,data);
   }
 
   async remove(user, kind, id) {
-    if (kind === 'debts') return this.removeDebt(user, id);
-    const result = await this.db.query('DELETE FROM entries WHERE user_id=? AND kind=? AND id=?', [user,kind,id]);
-    if (!result.rowsAffected[0]) throw new HttpError(404, 'Registro não encontrado.');
+    if (kind === 'debts') return this.debts.remove(user,id);
+    return this.entries.remove(user,kind,id);
   }
 
   async listDebts(user) {
-    const result = await this.db.query(
-      "SELECT * FROM debts WHERE user_id=? ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, current_balance DESC, id DESC",
-      [user],
-    );
-    return result.recordset.map(normalizeDebt);
+    return this.debts.list(user);
   }
 
   debtFields(data) {
-    const name = text(data.name);
-    const creditor = data.creditor ? text(data.creditor, 120) : null;
-    const originalAmount = cents(data.originalAmount ?? data.value);
-    const interestRate = Number(data.interestRate ?? 0);
-    if (!Number.isFinite(interestRate) || interestRate < 0 || interestRate > 100) throw new HttpError(400, 'Taxa de juros inválida.');
-    const installmentsTotal = Number(data.installmentsTotal ?? 0);
-    if (!Number.isInteger(installmentsTotal) || installmentsTotal < 0 || installmentsTotal > 600) throw new HttpError(400, 'Quantidade de parcelas inválida.');
-    const dueDay = data.dueDay === null || data.dueDay === undefined || data.dueDay === '' ? null : Number(data.dueDay);
-    if (dueDay !== null && (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31)) throw new HttpError(400, 'Dia de vencimento inválido.');
-    return {
-      name,
-      creditor,
-      originalAmount,
-      interestRateBps: Math.round(interestRate * 100),
-      installmentsTotal,
-      dueDay,
-    };
+    return this.debts.fields(data);
   }
 
   async addDebt(user, data) {
-    const fields = this.debtFields(data);
-    const result = await this.db.query(
-      "INSERT INTO debts(user_id,name,creditor,original_amount,current_balance,interest_rate_bps,installments_total,installments_paid,due_day,status,updated_at) VALUES(?,?,?,?,?,?,?,0,?,'active',CURRENT_TIMESTAMP) RETURNING id",
-      [user, fields.name, fields.creditor, fields.originalAmount, fields.originalAmount, fields.interestRateBps, fields.installmentsTotal, fields.dueDay],
-    );
-    return (await this.listDebts(user)).find(row => row.id === result.recordset[0].id);
+    return this.debts.add(user,data);
   }
 
   async debtForChange(database, user, id) {
-    const lock = database.kind === 'postgres' ? ' FOR UPDATE' : '';
-    return (await database.query(`SELECT * FROM debts WHERE user_id=? AND id=?${lock}`, [user,id])).recordset[0];
+    return this.debts.forChange(database,user,id);
   }
 
   async updateDebt(user, id, data) {
-    const fields = this.debtFields(data);
-    return this.db.transaction(async database => {
-      const current = await this.debtForChange(database,user,id);
-      if (!current) throw new HttpError(404, 'Dívida não encontrada.');
-
-      const paid = (await database.query(
-        'SELECT COALESCE(SUM(amount),0) AS total FROM debt_payments WHERE user_id=? AND debt_id=?',
-        [user,id],
-      )).recordset[0].total;
-      if (fields.originalAmount < paid) throw new HttpError(400, 'O valor original não pode ser menor que o total já pago.');
-
-      const currentBalance = fields.originalAmount - paid;
-      const status = currentBalance === 0 ? 'paid' : 'active';
-      await database.query(
-        'UPDATE debts SET name=?,creditor=?,original_amount=?,current_balance=?,interest_rate_bps=?,installments_total=?,due_day=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=?',
-        [fields.name, fields.creditor, fields.originalAmount, currentBalance, fields.interestRateBps, fields.installmentsTotal, fields.dueDay, status, user, id],
-      );
-      const updated = (await database.query('SELECT * FROM debts WHERE user_id=? AND id=?', [user,id])).recordset[0];
-      return normalizeDebt(updated);
-    });
+    return this.debts.update(user,id,data);
   }
 
   async removeDebt(user, id) {
-    const result = await this.db.query('DELETE FROM debts WHERE user_id=? AND id=?', [user,id]);
-    if (!result.rowsAffected[0]) throw new HttpError(404, 'Dívida não encontrada.');
+    return this.debts.remove(user,id);
   }
 
   async listDebtPayments(user, debtId) {
-    const debt = (await this.db.query('SELECT id FROM debts WHERE user_id=? AND id=?', [user,debtId])).recordset[0];
-    if (!debt) throw new HttpError(404, 'Dívida não encontrada.');
-    const result = await this.db.query(
-      'SELECT * FROM debt_payments WHERE user_id=? AND debt_id=? ORDER BY payment_date DESC,id DESC',
-      [user,debtId],
-    );
-    return result.recordset.map(normalizeDebtPayment);
+    return this.debts.listPayments(user,debtId);
   }
 
   async recalculateDebt(user, debtId, database = this.db) {
-    const debt = (await database.query('SELECT * FROM debts WHERE user_id=? AND id=?', [user,debtId])).recordset[0];
-    if (!debt) throw new HttpError(404, 'Dívida não encontrada.');
-    const summary = (await database.query(
-      'SELECT COALESCE(SUM(amount),0) AS paid, COALESCE(SUM(counts_as_installment),0) AS installments FROM debt_payments WHERE user_id=? AND debt_id=?',
-      [user,debtId],
-    )).recordset[0];
-    const balance = Math.max(0, debt.original_amount - summary.paid);
-    const installmentsPaid = debt.installments_total > 0 ? Math.min(debt.installments_total, summary.installments) : summary.installments;
-    await database.query(
-      'UPDATE debts SET current_balance=?,installments_paid=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=?',
-      [balance, installmentsPaid, balance === 0 ? 'paid' : 'active', user, debtId],
-    );
-    const updated = (await database.query('SELECT * FROM debts WHERE user_id=? AND id=?', [user,debtId])).recordset[0];
-    return normalizeDebt(updated);
+    return this.debts.recalculate(user,debtId,database);
   }
 
   async addDebtPayment(user, debtId, data) {
-    const amount = cents(data.amount);
-    const paymentDate = dateOnly(data.paymentDate ?? today());
-    const note = data.note ? text(data.note, 240) : null;
-    const countsAsInstallment = data.countsAsInstallment === false ? 0 : 1;
-
-    return this.db.transaction(async database => {
-      const debt = await this.debtForChange(database,user,debtId);
-      if (!debt) throw new HttpError(404, 'Dívida não encontrada.');
-      if (debt.current_balance <= 0) throw new HttpError(400, 'Esta dívida já está quitada.');
-      if (amount > debt.current_balance) throw new HttpError(400, 'O pagamento não pode ser maior que o saldo atual.');
-
-      const result = await database.query(
-        'INSERT INTO debt_payments(user_id,debt_id,amount,payment_date,note,counts_as_installment) VALUES(?,?,?,?,?,?) RETURNING id',
-        [user,debtId,amount,paymentDate,note,countsAsInstallment],
-      );
-      const debtAfter = await this.recalculateDebt(user,debtId,database);
-      const paymentRow = (await database.query(
-        'SELECT * FROM debt_payments WHERE user_id=? AND debt_id=? AND id=?',
-        [user,debtId,result.recordset[0].id],
-      )).recordset[0];
-      return {payment:normalizeDebtPayment(paymentRow),debt:debtAfter};
-    });
+    return this.debts.addPayment(user,debtId,data);
   }
 
   async removeDebtPayment(user, debtId, paymentId) {
-    return this.db.transaction(async database => {
-      const debt = await this.debtForChange(database,user,debtId);
-      if (!debt) throw new HttpError(404, 'Dívida não encontrada.');
-      const result = await database.query(
-        'DELETE FROM debt_payments WHERE user_id=? AND debt_id=? AND id=?',
-        [user,debtId,paymentId],
-      );
-      if (!result.rowsAffected[0]) throw new HttpError(404, 'Pagamento não encontrado.');
-      return this.recalculateDebt(user,debtId,database);
-    });
+    return this.debts.removePayment(user,debtId,paymentId);
   }
 
   async listBudgets(user, month) {
@@ -971,107 +796,27 @@ export class FinanceRepository {
   }
 
   async listRecurringExpenses(user) {
-    const result = await this.db.query(
-      'SELECT * FROM recurring_expenses WHERE user_id=? ORDER BY CASE active WHEN 1 THEN 0 ELSE 1 END,due_day,id DESC',
-      [user],
-    );
-    return result.recordset.map(normalizeRecurringExpense);
+    return this.recurring.list(user);
   }
 
   recurringExpenseFields(data) {
-    const name = text(data.name);
-    const category = text(data.category);
-    if (!categories.includes(category)) throw new HttpError(400, 'Categoria inválida.');
-    const amount = cents(data.value);
-    const dueDay = Number(data.dueDay);
-    if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) throw new HttpError(400, 'Dia de vencimento inválido.');
-    const activeFrom = dateOnly(data.activeFrom ?? today());
-    const active = data.active === false ? 0 : 1;
-    const requestedActiveUntil = dateOnly(data.activeUntil, {optional:true});
-    const deactivationDate = today();
-    const activeUntil = !active && !requestedActiveUntil
-      ? (deactivationDate < activeFrom ? activeFrom : deactivationDate)
-      : requestedActiveUntil;
-    if (activeUntil && activeUntil < activeFrom) throw new HttpError(400, 'A data final não pode ser anterior à data inicial.');
-    return {name,category,amount,dueDay,activeFrom,activeUntil,active};
+    return this.recurring.fields(data);
   }
 
   async addRecurringExpense(user, data) {
-    const fields = this.recurringExpenseFields(data);
-    const result = await this.db.query(
-      'INSERT INTO recurring_expenses(user_id,name,category,amount,due_day,active_from,active_until,active,updated_at) VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) RETURNING id',
-      [user,fields.name,fields.category,fields.amount,fields.dueDay,fields.activeFrom,fields.activeUntil,fields.active],
-    );
-    return (await this.listRecurringExpenses(user)).find(row => row.id === result.recordset[0].id);
+    return this.recurring.add(user,data);
   }
 
   async updateRecurringExpense(user, id, data) {
-    const fields = this.recurringExpenseFields(data);
-    const result = await this.db.query(
-      'UPDATE recurring_expenses SET name=?,category=?,amount=?,due_day=?,active_from=?,active_until=?,active=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=?',
-      [fields.name,fields.category,fields.amount,fields.dueDay,fields.activeFrom,fields.activeUntil,fields.active,user,id],
-    );
-    if (!result.rowsAffected[0]) throw new HttpError(404, 'Gasto recorrente não encontrado.');
-    return (await this.listRecurringExpenses(user)).find(row => row.id === id);
+    return this.recurring.update(user,id,data);
   }
 
   async removeRecurringExpense(user, id) {
-    await this.db.transaction(async database => {
-      const existing = (await database.query(
-        'SELECT id FROM recurring_expenses WHERE user_id=? AND id=?',
-        [user,id],
-      )).recordset[0];
-      if (!existing) throw new HttpError(404, 'Gasto recorrente não encontrado.');
-
-      await database.query(
-        'UPDATE entries SET recurring_expense_id=NULL,recurring_month=NULL WHERE user_id=? AND recurring_expense_id=?',
-        [user,id],
-      );
-      await database.query('DELETE FROM recurring_expenses WHERE user_id=? AND id=?', [user,id]);
-    });
+    return this.recurring.remove(user,id);
   }
 
   async recordRecurringExpensePayment(user, id, data) {
-    const monthKey = monthOnly(data.month);
-    return this.db.transaction(async database => {
-      const lock = database.kind === 'postgres' ? ' FOR UPDATE' : '';
-      const recurring = (await database.query(
-        `SELECT * FROM recurring_expenses WHERE user_id=? AND id=?${lock}`,
-        [user,id],
-      )).recordset[0];
-      if (!recurring) throw new HttpError(404, 'Gasto recorrente não encontrado.');
-
-      const item = normalizeRecurringExpense(recurring);
-      const {start:monthStart,end:monthEnd} = monthBounds(monthKey);
-      const activeUntil = effectiveRecurringEnd(item);
-      if (item.activeFrom > monthEnd || (activeUntil && activeUntil < monthStart)) {
-        throw new HttpError(400, 'Este gasto recorrente não está vigente no mês informado.');
-      }
-
-      const existing = (await database.query(
-        'SELECT id FROM entries WHERE user_id=? AND recurring_expense_id=? AND recurring_month=?',
-        [user,id,monthKey],
-      )).recordset[0];
-      if (existing) throw new HttpError(409, 'Este gasto recorrente já foi registrado como pago neste mês.');
-
-      const lastDay = Number(monthEnd.slice(8,10));
-      const scheduledDay = Math.min(item.dueDay,lastDay);
-      const scheduledDate = `${monthKey}-${String(scheduledDay).padStart(2,'0')}`;
-      const paymentDate = dateOnly(data.paymentDate ?? scheduledDate);
-      if (paymentDate.slice(0,7) !== monthKey) {
-        throw new HttpError(400, 'A data de pagamento deve pertencer ao mês selecionado.');
-      }
-
-      const result = await database.query(
-        'INSERT INTO entries(user_id,kind,name,category,amount,saved,transaction_date,updated_at,recurring_expense_id,recurring_month) VALUES(?,?,?,?,?,0,?,CURRENT_TIMESTAMP,?,?) RETURNING id',
-        [user,'transactions',item.name,item.category,cents(item.value),paymentDate,id,monthKey],
-      );
-      const row = (await database.query(
-        'SELECT * FROM entries WHERE user_id=? AND id=?',
-        [user,result.recordset[0].id],
-      )).recordset[0];
-      return normalizeEntry(row);
-    });
+    return this.recurring.recordPayment(user,id,data);
   }
 
   async exportUserData(user) {
