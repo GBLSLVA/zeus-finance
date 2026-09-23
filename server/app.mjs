@@ -64,6 +64,9 @@ const shiftMonthKey = (monthKey, offset) => {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
 };
 
+const moneyText = value =>
+  Number(value).toLocaleString('pt-BR', {style:'currency',currency:'BRL'});
+
 const normalizeEntry = row => ({
   id: row.id,
   name: row.name,
@@ -177,7 +180,7 @@ export class FinanceRepository {
         type:'balance',
         tone:'warning',
         title:'Gastos acima da renda',
-        message:`Os gastos do mês estão R$ ${Math.abs(balance).toFixed(2)} acima da renda registrada.`,
+        message:`Os gastos do mês estão ${moneyText(Math.abs(balance))} acima da renda registrada.`,
         value:balance,
       });
     } else if (income > 0) {
@@ -187,7 +190,7 @@ export class FinanceRepository {
         type:'balance',
         tone:committed >= 80 ? 'warning' : 'positive',
         title:committed >= 80 ? 'Renda bastante comprometida' : 'Saldo mensal positivo',
-        message:`${Math.round(committed)}% da renda do mês foi consumida por gastos. Saldo atual: R$ ${balance.toFixed(2)}.`,
+        message:`${Math.round(committed)}% da renda do mês foi consumida por gastos. Saldo atual: ${moneyText(balance)}.`,
         value:committed,
       });
     }
@@ -222,7 +225,7 @@ export class FinanceRepository {
         type:'category',
         tone:share >= 50 ? 'warning' : 'info',
         title:`${topCategory.category} lidera seus gastos`,
-        message:`Essa categoria representa ${Math.round(share)}% dos gastos do mês, com R$ ${topCategory.total.toFixed(2)}.`,
+        message:`Essa categoria representa ${Math.round(share)}% dos gastos do mês, com ${moneyText(topCategory.total)}.`,
         value:share,
       });
     }
@@ -236,7 +239,7 @@ export class FinanceRepository {
           type:'budget',
           tone:'warning',
           title:`Orçamento de ${budget.category} estourado`,
-          message:`O limite foi ultrapassado em R$ ${(categorySpent - budget.limit).toFixed(2)}.`,
+          message:`O limite foi ultrapassado em ${moneyText(categorySpent - budget.limit)}.`,
           value:usage,
         });
       } else if (usage >= 80) {
@@ -274,7 +277,7 @@ export class FinanceRepository {
         type:'goal',
         tone:'positive',
         title:'Evolução das metas',
-        message:`Suas metas estão ${Math.round(progress)}% concluídas, com R$ ${savedTotal.toFixed(2)} reservados.`,
+        message:`Suas metas estão ${Math.round(progress)}% concluídas, com ${moneyText(savedTotal)} reservados.`,
         value:progress,
       });
     }
