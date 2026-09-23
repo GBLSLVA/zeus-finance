@@ -382,6 +382,15 @@ export class FinanceRepository {
       );
     }
 
+    if (/(recorrente|recorrentes|conta fixa|contas fixas|compromisso mensal|compromissos mensais)/.test(normalized)) {
+      return respond(
+        'recurring-expenses',
+        dashboard.recurringTotal > 0
+          ? `Você tem ${moneyText(dashboard.recurringTotal)} em compromissos recorrentes neste mês, distribuídos em ${dashboard.recurringExpenses.length} recorrência${dashboard.recurringExpenses.length === 1 ? '' : 's'}. Seu saldo projetado, considerando gastos realizados e recorrentes, é ${moneyText(dashboard.projectedBalance)}.`
+          : 'Você não possui gastos recorrentes vigentes neste mês.',
+      );
+    }
+
     if (/(quanto gastei|gastos|despesas|quanto saiu)/.test(normalized)) {
       return respond(
         'expenses',
