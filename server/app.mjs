@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
+import { UserRepository } from './repositories/user-repository.mjs';
 
 export class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -181,7 +182,10 @@ const normalizeRecurringExpense = row => ({
 });
 
 export class FinanceRepository {
-  constructor(database) { this.db = database; }
+  constructor(database) {
+    this.db = database;
+    this.users = new UserRepository(database);
+  }
 
   async dashboard(user, month) {
     const monthKey = monthOnly(month);
@@ -1248,8 +1252,9 @@ export class FinanceRepository {
 }
 
 export class AuthService {
-  constructor(repository) {
-    this.db = repository.db;
+  constructor(userRepository) {
+    this.users = userRepository instanceof UserRepository ? userRepository : userRepository.users;
+    if (!this.users) throw new TypeError('AuthService requer um UserRepository.');
     this.attempts = new Map();
     this.loginWindowMs = 10 * 60 * 1000;
     this.maxLoginFailures = 20;
@@ -1275,9 +1280,9 @@ export class AuthService {
 
   async authenticate(token) {
     if (!token) throw new HttpError(401, 'Entre na sua conta.');
-    const session = (await this.db.query('SELECT user_id FROM sessions WHERE token=? AND expires>?', [digest(token), Date.now()])).recordset[0];
-    if (!session) throw new HttpError(401, 'Sessão expirada.');
-    return session.user_id;
+    const userId = await this.users.findSessionUser(digest(token), Date.now());
+    if (!userId) throw new HttpError(401, 'Sessão expirada.');
+    return userId;
   }
 
   async login(data, register, address) {
@@ -1297,15 +1302,10 @@ export class AuthService {
     let user;
     if (register) {
       const password = createPasswordHash(data.password);
-      const result = await this.db.query(
-        'INSERT INTO users(email,password) VALUES(?,?) ON CONFLICT(email) DO NOTHING RETURNING id',
-        [email,password],
-      );
-      const created = result.recordset[0];
-      if (!created) throw new HttpError(409, 'Não foi possível cadastrar este e-mail.');
-      user = {id:created.id,email};
+      user = await this.users.create(email,password);
+      if (!user) throw new HttpError(409, 'Não foi possível cadastrar este e-mail.');
     } else {
-      user = (await this.db.query('SELECT * FROM users WHERE email=?', [email])).recordset[0];
+      user = await this.users.findByEmail(email);
       const valid = verifyPassword(data.password, user?.password);
       if (!user || !valid) {
         this.registerFailedLogin(attemptKey, now);
@@ -1316,8 +1316,8 @@ export class AuthService {
 
     const token = randomBytes(32).toString('hex');
     const maxAgeSeconds = data.remember === true ? rememberedSessionMaxAgeSeconds : defaultSessionMaxAgeSeconds;
-    await this.db.query('DELETE FROM sessions WHERE expires<=?', [now]);
-    await this.db.query('INSERT INTO sessions(token,user_id,expires) VALUES(?,?,?)', [digest(token),user.id,now+(maxAgeSeconds * 1000)]);
+    await this.users.purgeExpiredSessions(now);
+    await this.users.createSession(digest(token),user.id,now+(maxAgeSeconds * 1000));
     return {token, maxAgeSeconds, user: {id:user.id,email:user.email}};
   }
 
@@ -1332,16 +1332,13 @@ export class AuthService {
       throw new HttpError(400, 'A nova senha deve ser diferente da senha atual.');
     }
 
-    const user = (await this.db.query('SELECT id,password FROM users WHERE id=?', [userId])).recordset[0];
+    const user = await this.users.findCredentialsById(userId);
     if (!user || !verifyPassword(data.currentPassword,user.password)) {
       throw new HttpError(400, 'Senha atual incorreta.');
     }
 
     const nextPassword = createPasswordHash(data.newPassword);
-    await this.db.transaction(async database => {
-      await database.query('UPDATE users SET password=? WHERE id=?', [nextPassword,userId]);
-      await database.query('DELETE FROM sessions WHERE user_id=? AND token<>?', [userId,digest(token)]);
-    });
+    await this.users.updatePasswordAndRevokeOtherSessions(userId,digest(token),nextPassword);
   }
 
   async deleteAccount(userId, data) {
@@ -1352,30 +1349,21 @@ export class AuthService {
       throw new HttpError(400, 'Digite EXCLUIR para confirmar a remoção da conta.');
     }
 
-    const user = (await this.db.query('SELECT id,password FROM users WHERE id=?', [userId])).recordset[0];
+    const user = await this.users.findCredentialsById(userId);
     if (!user || !verifyPassword(data.password,user.password)) {
       throw new HttpError(400, 'Senha incorreta.');
     }
 
-    await this.db.transaction(async database => {
-      await database.query('DELETE FROM debt_payments WHERE user_id=?', [userId]);
-      await database.query('DELETE FROM debts WHERE user_id=?', [userId]);
-      await database.query('DELETE FROM budgets WHERE user_id=?', [userId]);
-      await database.query('DELETE FROM recurring_expenses WHERE user_id=?', [userId]);
-      await database.query('DELETE FROM entries WHERE user_id=?', [userId]);
-      await database.query('DELETE FROM incomes WHERE user_id=?', [userId]);
-      await database.query('DELETE FROM sessions WHERE user_id=?', [userId]);
-      const result = await database.query('DELETE FROM users WHERE id=?', [userId]);
-      if (!result.rowsAffected[0]) throw new HttpError(404, 'Conta não encontrada.');
-    });
+    const deleted = await this.users.deleteAccount(userId);
+    if (!deleted) throw new HttpError(404, 'Conta não encontrada.');
   }
 
-  async logout(token) { await this.db.query('DELETE FROM sessions WHERE token=?', [digest(token)]); }
+  async logout(token) { await this.users.logout(digest(token)); }
 }
 
 export class FinanceApi {
   constructor(repository, origin = 'http://localhost:5173') {
-    this.repository = repository; this.auth = new AuthService(repository); this.origin = origin;
+    this.repository = repository; this.auth = new AuthService(repository.users); this.origin = origin;
     this.server = createServer((req,res) => this.handle(req,res));
   }
 
@@ -1463,7 +1451,7 @@ export class FinanceApi {
       }
 
       const user = await this.auth.authenticate(token);
-      if (path === '/api/me' && req.method === 'GET') return send(200,(await this.repository.db.query('SELECT id,email FROM users WHERE id=?', [user])).recordset[0]);
+      if (path === '/api/me' && req.method === 'GET') return send(200,await this.repository.users.findPublicById(user));
       if (path === '/api/export' && req.method === 'GET') return send(200,await this.repository.exportUserData(user));
       if (path === '/api/dashboard' && req.method === 'GET') return send(200,await this.repository.dashboard(user,url.searchParams.get('month')));
       if (path === '/api/insights' && req.method === 'GET') return send(200,await this.repository.insights(user,url.searchParams.get('month')));
