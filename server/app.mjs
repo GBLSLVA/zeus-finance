@@ -48,6 +48,7 @@ export class FinanceRepository {
 
     this.dashboardService = new DashboardService({
       entries:this.entries,
+      goals:this.goals,
       debts:this.debts,
       incomes:this.incomes,
       budgets:this.budgets,
@@ -55,6 +56,7 @@ export class FinanceRepository {
     });
     this.insightService = new InsightService({
       entries:this.entries,
+      goals:this.goals,
       debts:this.debts,
       incomes:this.incomes,
       budgets:this.budgets,
