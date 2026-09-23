@@ -54,13 +54,17 @@ jobs:
 
           for attempt in {1..30}; do
             if curl -fsS http://127.0.0.1:4173/api/health | grep -q '"status":"ok"'; then
-              exit 0
+              break
             fi
             sleep 1
           done
 
-          echo "Servidor de produção não ficou saudável."
-          exit 1
+          curl -fsS http://127.0.0.1:4173/api/health | grep -q '"status":"ok"'
+
+          INVALID_STATUS="$(curl -sS -o /tmp/zeus-invalid-url.out -w '%{http_code}' 'http://127.0.0.1:4173/%E0%A4%A')"
+          test "$INVALID_STATUS" = "400"
+
+          curl -fsS http://127.0.0.1:4173/api/health | grep -q '"status":"ok"'
 
       - name: Upload production build
         if: success()
