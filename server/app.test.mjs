@@ -497,6 +497,83 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
   }
 });
 
+test('Recorrentes: pagamento mensal vira gasto real sem duplicar a projeção', async () => {
+  const dir = mkdtempSync(join(tmpdir(),'zeus-recurring-'));
+  const path = join(dir,'recurring.sqlite');
+  const db = new SqliteDatabase(path);
+  const repository = new FinanceRepository(db);
+  const auth = new AuthService(repository);
+
+  try {
+    const owner = await auth.login({
+      email:'recurring@example.com',
+      password:'secure-recurring-password-123',
+    },true,'recurring-owner');
+    const user = owner.user.id;
+
+    await repository.addIncome(user,{
+      name:'Salário',
+      type:'salary',
+      value:1000,
+      activeFrom:'2026-01-01',
+      active:true,
+    });
+    const internet = await repository.addRecurringExpense(user,{
+      name:'Internet',
+      category:'Casa',
+      value:120,
+      dueDay:31,
+      activeFrom:'2026-01-01',
+      active:true,
+    });
+
+    const before = await repository.dashboard(user,'2026-09');
+    assert.equal(before.spent,0);
+    assert.equal(before.recurringTotal,120);
+    assert.equal(before.projectedSpent,120);
+    assert.equal(before.projectedBalance,880);
+    assert.equal(before.recurringExpenses[0].scheduledDate,'2026-09-30');
+    assert.equal(before.recurringExpenses[0].paid,false);
+
+    const payment = await repository.recordRecurringExpensePayment(user,internet.id,{
+      month:'2026-09',
+      paymentDate:'2026-09-20',
+    });
+    assert.equal(payment.value,120);
+    assert.equal(payment.transactionDate,'2026-09-20');
+    assert.equal(payment.recurringExpenseId,internet.id);
+    assert.equal(payment.recurringMonth,'2026-09');
+
+    const after = await repository.dashboard(user,'2026-09');
+    assert.equal(after.spent,120);
+    assert.equal(after.recurringTotal,0);
+    assert.equal(after.projectedSpent,120);
+    assert.equal(after.projectedBalance,880);
+    assert.equal(after.recurringExpenses[0].paid,true);
+
+    await assert.rejects(
+      repository.recordRecurringExpensePayment(user,internet.id,{month:'2026-09'}),
+      error => error.status === 409,
+    );
+
+    const february = await repository.dashboard(user,'2026-02');
+    assert.equal(february.recurringTotal,120);
+    assert.equal(february.recurringExpenses[0].scheduledDate,'2026-02-28');
+    assert.equal(february.recurringExpenses[0].paid,false);
+
+    const second = await auth.login({
+      email:'recurring-second@example.com',
+      password:'secure-recurring-password-456',
+    },true,'recurring-second');
+    const isolated = await repository.dashboard(second.user.id,'2026-09');
+    assert.equal(isolated.recurringTotal,0);
+    assert.equal(isolated.recurringExpenses.length,0);
+  } finally {
+    await db.close();
+    rmSync(dir,{recursive:true,force:true});
+  }
+});
+
 test('Insights: detecta duplicidade, gasto fora do padrão e alta de categoria', async () => {
   const dir = mkdtempSync(join(tmpdir(),'zeus-insights-'));
   const path = join(dir,'insights.sqlite');
@@ -736,6 +813,10 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
     assert.ok(recurringColumns.includes('due_day'));
     assert.ok(recurringColumns.includes('active_from'));
     assert.ok(recurringColumns.includes('active_until'));
+
+    const recurringEntryColumns = migrated.db.prepare('PRAGMA table_info(entries)').all().map(row => row.name);
+    assert.ok(recurringEntryColumns.includes('recurring_expense_id'));
+    assert.ok(recurringEntryColumns.includes('recurring_month'));
   } finally {
     await migrated.close();
     rmSync(dir,{recursive:true,force:true});
