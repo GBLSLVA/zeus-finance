@@ -218,6 +218,24 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.equal((await call('budgets?month=2026-13','GET',undefined,first.cookie)).status,400);
     assert.equal((await call('budgets','POST',{month:'2026-09',category:'Inválida',limit:100},first.cookie)).status,400);
 
+    const dashboard = await call('dashboard?month=2026-09','GET',undefined,first.cookie);
+    assert.equal(dashboard.status,200);
+    assert.equal(dashboard.data.spent,20);
+    assert.equal(dashboard.data.extras,450);
+    assert.equal(dashboard.data.income,1650);
+    assert.equal(dashboard.data.balance,1630);
+    assert.equal(dashboard.data.debt,1100);
+    assert.equal(dashboard.data.saved,100);
+    assert.equal(dashboard.data.targets,1000);
+    assert.equal(dashboard.data.monthly.length,1);
+    assert.equal(dashboard.data.monthlyExtras.length,1);
+    assert.equal(dashboard.data.budgetTotal,1350);
+    assert.equal(dashboard.data.budgetedSpent,20);
+    assert.equal(dashboard.data.budgetRemaining,1330);
+    assert.equal(dashboard.data.historyData.length,6);
+    assert.equal(dashboard.data.historyData.at(-1).monthKey,'2026-09');
+    assert.equal((await call('dashboard?month=2026-13','GET',undefined,first.cookie)).status,400);
+
     const second = await call('register','POST',{email:'b@example.com',password:'secure-password-456'});
     assert.deepEqual((await call('transactions','GET',undefined,second.cookie)).data,[]);
 
