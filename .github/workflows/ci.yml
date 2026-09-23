@@ -64,6 +64,9 @@ jobs:
           INVALID_STATUS="$(curl -sS -o /tmp/zeus-invalid-url.out -w '%{http_code}' 'http://127.0.0.1:4173/%E0%A4%A')"
           test "$INVALID_STATUS" = "400"
 
+          MISSING_ASSET_STATUS="$(curl -sS -o /tmp/zeus-missing-asset.out -w '%{http_code}' 'http://127.0.0.1:4173/assets/missing.js')"
+          test "$MISSING_ASSET_STATUS" = "404"
+
           curl -fsS http://127.0.0.1:4173/api/health | grep -q '"status":"ok"'
 
       - name: Upload production build
