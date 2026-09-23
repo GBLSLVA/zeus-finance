@@ -63,7 +63,6 @@ export function RecurringExpensesPage({
         <section className="panel records-panel">
           <div className="panel__header records-panel__header">
             <div>
-              <span className="panel__eyebrow">COMPROMISSOS MENSAIS</span>
               <h2>Gastos recorrentes</h2>
             </div>
             <span className="records-count">{recurringExpenses.length} {recurringExpenses.length === 1 ? 'item' : 'itens'}</span>
@@ -134,7 +133,6 @@ export function RecurringExpensesPage({
         </section>
 
         <aside className="panel record-form-panel">
-          <span className="panel__eyebrow">{editing ? 'EDITAR RECORRÊNCIA' : 'NOVA RECORRÊNCIA'}</span>
           <h2>{editing ? 'Atualizar compromisso' : 'Adicionar compromisso mensal'}</h2>
           <p>O valor entra como projeção mensal e não será marcado automaticamente como gasto já pago.</p>
           <form key={`recurring-${editing?.id ?? 'new'}`} onSubmit={onSubmit}>
