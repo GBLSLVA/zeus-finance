@@ -11,6 +11,10 @@ import { EntryRepository } from './repositories/entry-repository.mjs';
 import { IncomeRepository } from './repositories/income-repository.mjs';
 import { RecurringExpenseRepository } from './repositories/recurring-expense-repository.mjs';
 import { UserRepository } from './repositories/user-repository.mjs';
+import { AssistantService } from './services/assistant-service.mjs';
+import { DashboardService } from './services/dashboard-service.mjs';
+import { ExportService } from './services/export-service.mjs';
+import { InsightService } from './services/insight-service.mjs';
 import { AuthService, FinanceRepository } from './app.mjs';
 
 test('Arquitetura: adaptadores de banco implementam o mesmo contrato', () => {
@@ -32,6 +36,10 @@ test('Arquitetura: FinanceRepository compõe UserRepository e AuthService depend
     assert.ok(finance.budgets instanceof BudgetRepository);
     assert.ok(finance.recurring instanceof RecurringExpenseRepository);
     assert.ok(finance.incomes instanceof IncomeRepository);
+    assert.ok(finance.dashboardService instanceof DashboardService);
+    assert.ok(finance.insightService instanceof InsightService);
+    assert.ok(finance.assistantService instanceof AssistantService);
+    assert.ok(finance.exportService instanceof ExportService);
 
     const auth = new AuthService(finance.users);
     const registered = await auth.login({
