@@ -561,6 +561,19 @@ test('Recorrentes: pagamento mensal vira gasto real sem duplicar a projeção', 
     assert.equal(february.recurringExpenses[0].scheduledDate,'2026-02-28');
     assert.equal(february.recurringExpenses[0].paid,false);
 
+    await repository.removeRecurringExpense(user,internet.id);
+    assert.equal((await repository.listRecurringExpenses(user)).length,0);
+    const preservedTransactions = await repository.list(user,'transactions');
+    assert.equal(preservedTransactions.length,1);
+    assert.equal(preservedTransactions[0].name,'Internet');
+    assert.equal(preservedTransactions[0].recurringExpenseId,null);
+    assert.equal(preservedTransactions[0].recurringMonth,null);
+
+    const afterRemoval = await repository.dashboard(user,'2026-09');
+    assert.equal(afterRemoval.spent,120);
+    assert.equal(afterRemoval.recurringTotal,0);
+    assert.equal(afterRemoval.projectedBalance,880);
+
     const second = await auth.login({
       email:'recurring-second@example.com',
       password:'secure-recurring-password-456',
