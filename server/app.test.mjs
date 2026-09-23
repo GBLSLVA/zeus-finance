@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
+import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { SqliteDatabase, PostgresDatabase, openDatabase, translatePostgresSql } from './database.mjs';
 import { AuthService, FinanceApi, FinanceRepository } from './app.mjs';
@@ -27,6 +28,7 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
       status:response.status,
       data:await response.json(),
       cookie:response.headers.get('set-cookie')?.split(';')[0],
+      setCookie:response.headers.get('set-cookie'),
     };
   }
 
@@ -36,8 +38,31 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     const first = await call('register','POST',{email:'a@example.com',password:'secure-password-123'});
     assert.equal(first.status,200);
     assert.ok(first.cookie);
+    assert.match(first.setCookie,/Max-Age=86400/);
+
+    const firstToken = first.cookie.split('=')[1];
+    const firstTokenHash = createHash('sha256').update(firstToken).digest('hex');
+    const firstExpiry = (await db.query('SELECT expires FROM sessions WHERE token=?',[firstTokenHash])).recordset[0].expires;
+    assert.ok(firstExpiry - Date.now() > 23 * 60 * 60 * 1000);
+    assert.ok(firstExpiry - Date.now() <= 24 * 60 * 60 * 1000);
+
     assert.equal((await call('register','POST',{email:'a@example.com',password:'another-secure-password-123'})).status,409);
     assert.equal((await call('login','POST',{email:'a@example.com',password:'wrong-password-123'})).status,401);
+
+    const remembered = await call('login','POST',{
+      email:'a@example.com',
+      password:'secure-password-123',
+      remember:true,
+    });
+    assert.equal(remembered.status,200);
+    assert.match(remembered.setCookie,/Max-Age=2592000/);
+
+    const rememberedToken = remembered.cookie.split('=')[1];
+    const rememberedTokenHash = createHash('sha256').update(rememberedToken).digest('hex');
+    const rememberedExpiry = (await db.query('SELECT expires FROM sessions WHERE token=?',[rememberedTokenHash])).recordset[0].expires;
+    assert.ok(rememberedExpiry - Date.now() > 29 * 24 * 60 * 60 * 1000);
+    assert.ok(rememberedExpiry - Date.now() <= 30 * 24 * 60 * 60 * 1000);
+    await call('logout','POST',undefined,remembered.cookie);
 
     const added = await call('transactions','POST',{
       name:"Mercado ' teste",
