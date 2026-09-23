@@ -642,7 +642,14 @@ export class FinanceApi {
       if (path === '/api/health' && req.method === 'GET') {
         try {
           await this.repository.db.query('SELECT 1 AS ok');
-          return send(200,{status:'ok',database:this.repository.db.kind ?? 'unknown'});
+          const database = this.repository.db.kind ?? 'unknown';
+          return send(200,{
+            status:'ok',
+            database,
+            persistent:database === 'postgres',
+            environment:process.env.RENDER === 'true' ? 'render' : (process.env.NODE_ENV ?? 'development'),
+            commit:process.env.RENDER_GIT_COMMIT?.slice(0,12) ?? null,
+          });
         } catch (error) {
           console.error('Health check database error:', error);
           return send(503,{status:'degraded'});
