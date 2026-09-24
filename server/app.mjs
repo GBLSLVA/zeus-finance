@@ -311,6 +311,9 @@ export class AuthService {
     }
 
     const now = Date.now();
+    for (const [attemptKey, entry] of this.resetAttempts) {
+      if (entry.until <= now) this.resetAttempts.delete(attemptKey);
+    }
     const key = this.attemptKey(address,email);
     const previous = this.resetAttempts.get(key);
     const attempt = previous && previous.until > now
