@@ -13,12 +13,14 @@ import { AssistantService } from './services/assistant-service.mjs';
 import { DashboardService } from './services/dashboard-service.mjs';
 import { ExportService } from './services/export-service.mjs';
 import { InsightService } from './services/insight-service.mjs';
+import { ResendEmailService } from './services/email-service.mjs';
 
 export { HttpError } from './http-error.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const defaultSessionMaxAgeSeconds = 24 * 60 * 60;
 const rememberedSessionMaxAgeSeconds = 30 * 24 * 60 * 60;
+const passwordResetMaxAgeMs = 30 * 60 * 1000;
 const dummyPasswordHash = `${'0'.repeat(32)}:${'0'.repeat(128)}`;
 
 const createPasswordHash = password => {
@@ -218,11 +220,13 @@ export class FinanceRepository {
 }
 
 export class AuthService {
-  constructor(userRepository) {
+  constructor(userRepository, emailService = new ResendEmailService()) {
     this.users = userRepository?.users ?? userRepository;
+    this.emailService = emailService;
     const requiredMethods = [
       'findSessionUser','create','findByEmail','findCredentialsById',
       'purgeExpiredSessions','createSession','updatePasswordAndRevokeOtherSessions',
+      'purgeExpiredPasswordResetTokens','createPasswordResetToken','resetPasswordWithToken',
       'deleteAccount','logout',
     ];
     if (!this.users || requiredMethods.some(method => typeof this.users[method] !== 'function')) {
@@ -231,6 +235,9 @@ export class AuthService {
     this.attempts = new Map();
     this.loginWindowMs = 10 * 60 * 1000;
     this.maxLoginFailures = 20;
+    this.resetAttempts = new Map();
+    this.resetWindowMs = 15 * 60 * 1000;
+    this.maxResetRequests = 5;
   }
 
   attemptKey(address, email) {
@@ -294,6 +301,59 @@ export class AuthService {
     return {token, maxAgeSeconds, user: {id:user.id,email:user.email}};
   }
 
+  async requestPasswordReset(data, address) {
+    const email = text(data.email,254).toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new HttpError(400,'E-mail inválido.');
+    }
+    if (!this.emailService?.enabled) {
+      throw new HttpError(503,'A recuperação de senha por e-mail ainda não está configurada.');
+    }
+
+    const now = Date.now();
+    for (const [attemptKey, entry] of this.resetAttempts) {
+      if (entry.until <= now) this.resetAttempts.delete(attemptKey);
+    }
+    const key = this.attemptKey(address,email);
+    const previous = this.resetAttempts.get(key);
+    const attempt = previous && previous.until > now
+      ? {count:previous.count + 1,until:previous.until}
+      : {count:1,until:now + this.resetWindowMs};
+    this.resetAttempts.set(key,attempt);
+
+    await this.users.purgeExpiredPasswordResetTokens(now);
+    if (attempt.count > this.maxResetRequests) return;
+
+    const user = await this.users.findByEmail(email);
+    if (!user) return;
+
+    const token = randomBytes(32).toString('hex');
+    await this.users.createPasswordResetToken(user.id,digest(token),now + passwordResetMaxAgeMs);
+    try {
+      await this.emailService.sendPasswordReset(user.email,token);
+    } catch (error) {
+      // A resposta pública continua idêntica para contas existentes e inexistentes.
+      console.error('Password reset email error:', error);
+    }
+  }
+
+  async resetPassword(data) {
+    const token = typeof data.token === 'string' ? data.token.trim() : '';
+    if (!/^[a-f0-9]{64}$/i.test(token)) {
+      throw new HttpError(400,'Link de recuperação inválido ou expirado.');
+    }
+    if (typeof data.newPassword !== 'string' || data.newPassword.length < 12 || data.newPassword.length > 128) {
+      throw new HttpError(400,'Use uma nova senha entre 12 e 128 caracteres.');
+    }
+
+    const updated = await this.users.resetPasswordWithToken(
+      digest(token),
+      Date.now(),
+      createPasswordHash(data.newPassword),
+    );
+    if (!updated) throw new HttpError(400,'Link de recuperação inválido ou expirado.');
+  }
+
   async changePassword(userId, token, data) {
     if (typeof data.currentPassword !== 'string' || data.currentPassword.length < 12 || data.currentPassword.length > 128) {
       throw new HttpError(400, 'Senha atual inválida.');
@@ -335,8 +395,8 @@ export class AuthService {
 }
 
 export class FinanceApi {
-  constructor(repository, origin = 'http://localhost:5173') {
-    this.repository = repository; this.auth = new AuthService(repository.users); this.origin = origin;
+  constructor(repository, origin = 'http://localhost:5173', emailService = new ResendEmailService()) {
+    this.repository = repository; this.auth = new AuthService(repository.users,emailService); this.origin = origin;
     this.server = createServer((req,res) => this.handle(req,res));
   }
 
@@ -421,6 +481,14 @@ export class FinanceApi {
       if (['/api/register','/api/login'].includes(path) && req.method === 'POST') {
         const result = await this.auth.login(await this.body(req),path === '/api/register',this.clientAddress(req));
         return send(200,result.user,{'Set-Cookie':`zeus_session=${result.token}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=${result.maxAgeSeconds}${secure}`});
+      }
+      if (path === '/api/forgot-password' && req.method === 'POST') {
+        await this.auth.requestPasswordReset(await this.body(req),this.clientAddress(req));
+        return send(200,{message:'Se houver uma conta com este e-mail, enviaremos um link de recuperação.'});
+      }
+      if (path === '/api/reset-password' && req.method === 'POST') {
+        await this.auth.resetPassword(await this.body(req));
+        return send(200,{reset:true});
       }
 
       const user = await this.auth.authenticate(token);

@@ -11,6 +11,7 @@ Funcionalidades principais:
 - Cadastro, login e logout com sessão por cookie.
 - Sessão padrão de 24 horas, com opção explícita de manter o dispositivo conectado por 30 dias.
 - Troca de senha exigindo a senha atual, com encerramento automático das outras sessões.
+- Recuperação de senha por e-mail com token de uso único, hash SHA-256 no banco, validade de 30 minutos e revogação de sessões após a redefinição.
 - Exclusão segura da conta, com confirmação por senha e remoção transacional dos dados do usuário.
 - Exportação completa dos dados da conta em backup JSON v2 isolado por usuário, incluindo movimentações de metas.
 - Exportação CSV compatível com Excel/Google Sheets, com separador regional e proteção contra fórmulas em campos de texto.
@@ -84,7 +85,8 @@ Migrações atuais:
 5. orçamentos mensais por categoria;
 6. proteção para impedir valor reservado de meta acima do valor alvo;
 7. gastos recorrentes com vigência e vencimento mensal;
-8. histórico transacional de movimentações de metas, com migração automática do saldo reservado existente.
+8. histórico transacional de movimentações de metas, com migração automática do saldo reservado existente;
+9. tokens seguros e temporários para recuperação de senha.
 
 Bases criadas por versões anteriores são atualizadas automaticamente ao iniciar o servidor.
 
@@ -107,6 +109,17 @@ Inicie interface e API no mesmo processo:
 No computador:
 
 `http://localhost:5173`
+
+
+### Recuperação de senha por e-mail
+
+Para habilitar **Esqueci minha senha** em produção, configure:
+
+`APP_BASE_URL` — URL pública do ZEUS, sem barra final.  
+`RESEND_API_KEY` — chave da API de e-mail transacional.  
+`PASSWORD_RESET_EMAIL_FROM` — remetente validado, por exemplo `ZEUS Finance <acesso@seudominio.com>`.
+
+O token bruto nunca é salvo. O banco armazena somente o SHA-256 do token, que expira em 30 minutos e é apagado depois do uso.
 
 ## Acesso pelo celular
 
@@ -141,6 +154,7 @@ Execute:
 A suíte cobre atualmente:
 
 - autenticação;
+- recuperação de senha, expiração de token, uso único e revogação de sessões;
 - isolamento de usuários;
 - criação, edição e exclusão de registros;
 - validação de valores e datas;
@@ -179,7 +193,8 @@ Responsabilidades:
 - **ApiClient:** chamadas HTTP da interface.
 - **FinanceApi:** roteamento, validação de origem e respostas HTTP.
 - **FinanceRepository:** fachada compatível da camada financeira; delega persistência aos repositories e cálculos/orquestração aos services.
-- **UserRepository:** persistência de usuários, credenciais e sessões.
+- **UserRepository:** persistência de usuários, credenciais, sessões e tokens de recuperação.
+- **ResendEmailService:** envio transacional do link de redefinição sem armazenar chaves no código.
 - **EntryRepository:** persistência e validação de gastos.
 - **GoalRepository:** metas, aportes, retiradas, histórico e concorrência transacional.
 - **DebtRepository:** dívidas, pagamentos, recálculo de saldo e concorrência transacional.
@@ -190,7 +205,7 @@ Responsabilidades:
 - **InsightService:** tendências, anomalias, alertas e resumo financeiro.
 - **AssistantService:** interpreta perguntas suportadas e combina Dashboard/Insights para responder com dados reais.
 - **ExportService:** gera o backup financeiro completo da conta.
-- **AuthService:** regras de cadastro, login, troca de senha, sessões e proteção contra tentativas excessivas; não executa SQL diretamente.
+- **AuthService:** regras de cadastro, login, troca/recuperação de senha, sessões e proteção contra tentativas excessivas; não executa SQL diretamente.
 - **DatabaseAdapter:** contrato comum da camada de persistência.
 - **SqliteDatabase / PostgresDatabase:** implementações polimórficas do contrato de banco.
 - **src/domain/finance.ts:** tipos e constantes do domínio financeiro usados pelo frontend.

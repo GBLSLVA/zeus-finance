@@ -228,6 +228,22 @@ const sqliteMigrations = [
       `);
     },
   },
+  {
+    version: 9,
+    name: 'password_reset_tokens',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS password_reset_tokens(
+          token TEXT PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          expires INTEGER NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS password_reset_tokens_user_expires
+        ON password_reset_tokens(user_id,expires);
+      `);
+    },
+  },
 ];
 
 const postgresMigrations = [
@@ -420,6 +436,20 @@ const postgresMigrations = [
         SELECT 1 FROM goal_movements movement
         WHERE movement.user_id=entries.user_id AND movement.goal_id=entries.id
       );
+    `,
+  },
+  {
+    version: 9,
+    name: 'password_reset_tokens',
+    sql: `
+      CREATE TABLE IF NOT EXISTS password_reset_tokens(
+        token TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        expires BIGINT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS')
+      );
+      CREATE INDEX IF NOT EXISTS password_reset_tokens_user_expires
+      ON password_reset_tokens(user_id,expires);
     `,
   },
 ];

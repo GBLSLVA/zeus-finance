@@ -66,6 +66,9 @@ test('Arquitetura: AuthService aceita implementação compatível sem depender d
     purgeExpiredSessions: async () => {},
     createSession: async () => {},
     updatePasswordAndRevokeOtherSessions: async () => {},
+    purgeExpiredPasswordResetTokens: async () => {},
+    createPasswordResetToken: async () => {},
+    resetPasswordWithToken: async () => false,
     deleteAccount: async () => false,
     logout: async () => {},
   };

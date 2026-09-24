@@ -52,6 +52,36 @@ export class UserRepository {
     );
   }
 
+  async purgeExpiredPasswordResetTokens(now) {
+    await this.database.query('DELETE FROM password_reset_tokens WHERE expires<=?', [now]);
+  }
+
+  async createPasswordResetToken(userId, tokenDigest, expires) {
+    await this.database.transaction(async database => {
+      await database.query('DELETE FROM password_reset_tokens WHERE user_id=?', [userId]);
+      await database.query(
+        'INSERT INTO password_reset_tokens(token,user_id,expires) VALUES(?,?,?)',
+        [tokenDigest,userId,expires],
+      );
+    });
+  }
+
+  async resetPasswordWithToken(tokenDigest, now, nextPassword) {
+    return this.database.transaction(async database => {
+      const lock = database.kind === 'postgres' ? ' FOR UPDATE' : '';
+      const reset = (await database.query(
+        `SELECT user_id FROM password_reset_tokens WHERE token=? AND expires>?${lock}`,
+        [tokenDigest,now],
+      )).recordset[0];
+      if (!reset) return false;
+
+      await database.query('UPDATE users SET password=? WHERE id=?', [nextPassword,reset.user_id]);
+      await database.query('DELETE FROM sessions WHERE user_id=?', [reset.user_id]);
+      await database.query('DELETE FROM password_reset_tokens WHERE user_id=?', [reset.user_id]);
+      return true;
+    });
+  }
+
   async updatePasswordAndRevokeOtherSessions(userId, currentTokenDigest, nextPassword) {
     await this.database.transaction(async database => {
       await database.query('UPDATE users SET password=? WHERE id=?', [nextPassword, userId]);
@@ -71,6 +101,7 @@ export class UserRepository {
       await database.query('DELETE FROM entries WHERE user_id=?', [userId]);
       await database.query('DELETE FROM incomes WHERE user_id=?', [userId]);
       await database.query('DELETE FROM sessions WHERE user_id=?', [userId]);
+      await database.query('DELETE FROM password_reset_tokens WHERE user_id=?', [userId]);
       const result = await database.query('DELETE FROM users WHERE id=?', [userId]);
       return Boolean(result.rowsAffected[0]);
     });

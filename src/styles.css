@@ -435,6 +435,40 @@ svg {
   color: var(--text);
 }
 
+.auth-password-help {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: -8px;
+}
+
+.auth-password-help > small {
+  margin: 0;
+}
+
+.auth-inline-action {
+  min-height: 44px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auth-inline-action:hover {
+  color: var(--accent-hover);
+}
+
+@media (max-width: 480px) {
+  .auth-password-help {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
 /* Application shell */
 
 .app-shell {

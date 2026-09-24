@@ -558,6 +558,86 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
   }
 });
 
+test('Auth: recuperação de senha usa token único, expira e revoga sessões', async () => {
+  const dir = mkdtempSync(join(tmpdir(),'zeus-reset-test-'));
+  const path = join(dir,'test.sqlite');
+  const db = new SqliteDatabase(path);
+  let deliveredToken = null;
+  const emailService = {
+    enabled:true,
+    async sendPasswordReset(email, token) {
+      assert.equal(email,'reset@example.com');
+      deliveredToken = token;
+    },
+  };
+  const api = new FinanceApi(new FinanceRepository(db),'http://localhost:5173',emailService);
+  api.server.listen(0,'127.0.0.1');
+  await once(api.server,'listening');
+  const base = `http://127.0.0.1:${api.server.address().port}/api/`;
+
+  async function call(route,method='GET',body,cookie) {
+    const response = await fetch(base+route,{
+      method,
+      headers:{'Content-Type':'application/json',Origin:'http://localhost:5173',...(cookie?{Cookie:cookie}:{})},
+      body:body?JSON.stringify(body):undefined,
+    });
+    return {
+      status:response.status,
+      data:await response.json(),
+      cookie:response.headers.get('set-cookie')?.split(';')[0],
+    };
+  }
+
+  try {
+    const account = await call('register','POST',{email:'reset@example.com',password:'secure-password-123'});
+    assert.equal(account.status,200);
+
+    deliveredToken = null;
+    const unknown = await call('forgot-password','POST',{email:'unknown@example.com'});
+    assert.equal(unknown.status,200);
+    assert.equal(deliveredToken,null);
+
+    const requested = await call('forgot-password','POST',{email:'reset@example.com'});
+    assert.equal(requested.status,200);
+    assert.match(deliveredToken,/^[a-f0-9]{64}$/);
+
+    const tokenHash = createHash('sha256').update(deliveredToken).digest('hex');
+    assert.equal((await db.query('SELECT COUNT(*) AS total FROM password_reset_tokens WHERE token=?',[deliveredToken])).recordset[0].total,0);
+    assert.equal((await db.query('SELECT COUNT(*) AS total FROM password_reset_tokens WHERE token=?',[tokenHash])).recordset[0].total,1);
+
+    await db.query('UPDATE password_reset_tokens SET expires=? WHERE token=?',[Date.now()-1,tokenHash]);
+    assert.equal((await call('reset-password','POST',{
+      token:deliveredToken,
+      newPassword:'new-secure-password-456',
+    })).status,400);
+
+    deliveredToken = null;
+    assert.equal((await call('forgot-password','POST',{email:'reset@example.com'})).status,200);
+    const validToken = deliveredToken;
+    assert.match(validToken,/^[a-f0-9]{64}$/);
+
+    const reset = await call('reset-password','POST',{
+      token:validToken,
+      newPassword:'new-secure-password-456',
+    });
+    assert.equal(reset.status,200);
+    assert.equal(reset.data.reset,true);
+
+    assert.equal((await call('me','GET',undefined,account.cookie)).status,401);
+    assert.equal((await call('reset-password','POST',{
+      token:validToken,
+      newPassword:'another-secure-password-789',
+    })).status,400);
+    assert.equal((await call('login','POST',{email:'reset@example.com',password:'secure-password-123'})).status,401);
+    assert.equal((await call('login','POST',{email:'reset@example.com',password:'new-secure-password-456'})).status,200);
+  } finally {
+    api.server.close();
+    await once(api.server,'close');
+    await db.close();
+    rmSync(dir,{recursive:true,force:true});
+  }
+});
+
 test('Recorrentes: pagamento mensal vira gasto real sem duplicar a projeção', async () => {
   const dir = mkdtempSync(join(tmpdir(),'zeus-recurring-'));
   const path = join(dir,'recurring.sqlite');
@@ -812,7 +892,7 @@ test('Conta: exclusão remove dados próprios e preserva outro usuário', async 
       confirmation:'EXCLUIR',
     });
 
-    for (const table of ['sessions','entries','goal_movements','incomes','debts','debt_payments','budgets','recurring_expenses']) {
+    for (const table of ['sessions','password_reset_tokens','entries','goal_movements','incomes','debts','debt_payments','budgets','recurring_expenses']) {
       const count = (await db.query(`SELECT COUNT(*) AS total FROM ${table} WHERE user_id=?`,[owner.user.id])).recordset[0].total;
       assert.equal(count,0,`${table} ainda possui dados do usuário excluído`);
     }
@@ -853,7 +933,7 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
   const migrated = new SqliteDatabase(path);
   try {
     const versions = migrated.db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(row => row.version);
-    assert.deepEqual(versions,[1,2,3,4,5,6,7,8]);
+    assert.deepEqual(versions,[1,2,3,4,5,6,7,8,9]);
 
     const entryColumns = migrated.db.prepare('PRAGMA table_info(entries)').all().map(row => row.name);
     assert.ok(entryColumns.includes('transaction_date'));
@@ -967,7 +1047,7 @@ test('PostgreSQL: persiste cadastro e permite login após reconectar', {skip: !p
   await firstConnection.init();
   try {
     const versions = (await firstConnection.query('SELECT version FROM schema_migrations ORDER BY version')).recordset.map(row => row.version);
-    assert.deepEqual(versions,[1,2,3,4,5,6,7,8]);
+    assert.deepEqual(versions,[1,2,3,4,5,6,7,8,9]);
 
     const auth = new AuthService(new FinanceRepository(firstConnection));
     const registered = await auth.login({email,password},true,'postgres-register');
