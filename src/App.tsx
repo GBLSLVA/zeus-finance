@@ -278,6 +278,7 @@ export function App() {
     setBusy(true)
     try {
       await api.request('reset-password','POST',{token:recoveryToken,newPassword})
+      setUser(null)
       backToLogin()
       setNotice('Senha redefinida com sucesso. Entre com a nova senha.')
     } catch (e) {
@@ -915,7 +916,7 @@ export function App() {
     )
   }
 
-  if (!user) {
+  if (!user || recoveryMode !== 'none') {
     return (
       <main className="auth-page">
         <section className="auth-brand-panel" aria-hidden="true">
