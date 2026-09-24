@@ -329,8 +329,8 @@ export class AuthService {
     try {
       await this.emailService.sendPasswordReset(user.email,token);
     } catch (error) {
+      // A resposta pública continua idêntica para contas existentes e inexistentes.
       console.error('Password reset email error:', error);
-      throw new HttpError(503,'Não foi possível enviar o e-mail de recuperação agora. Tente novamente mais tarde.');
     }
   }
 
