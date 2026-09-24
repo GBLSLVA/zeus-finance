@@ -39,6 +39,13 @@ import {
   shiftMonthKey,
 } from './utils/finance'
 
+type RecoveryMode = 'none' | 'request' | 'reset'
+
+function recoveryTokenFromLocation() {
+  if (typeof window === 'undefined') return ''
+  return /^#reset=([a-f0-9]{64})$/i.exec(window.location.hash)?.[1] ?? ''
+}
+
 function downloadText(content: string, mimeType: string, filename: string) {
   const blob = new Blob([content], { type: mimeType })
   const url = URL.createObjectURL(blob)
@@ -55,6 +62,8 @@ export function App() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [register, setRegister] = useState(false)
+  const [recoveryToken, setRecoveryToken] = useState(() => recoveryTokenFromLocation())
+  const [recoveryMode, setRecoveryMode] = useState<RecoveryMode>(() => recoveryTokenFromLocation() ? 'reset' : 'none')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -219,6 +228,64 @@ export function App() {
     window.addEventListener('zeus:unauthorized', handleUnauthorized)
     return () => window.removeEventListener('zeus:unauthorized', handleUnauthorized)
   }, [user])
+
+  function backToLogin() {
+    setRegister(false)
+    setRecoveryMode('none')
+    setRecoveryToken('')
+    setError('')
+    setNotice('')
+    if (typeof window !== 'undefined' && window.location.hash.startsWith('#reset=')) {
+      window.history.replaceState(null,'',window.location.pathname + window.location.search)
+    }
+  }
+
+  async function requestPasswordReset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const result = await api.request<{ message: string }>('forgot-password','POST',{
+        email:form.get('email'),
+      })
+      setNotice(result.message)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function resetForgottenPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const newPassword = String(form.get('newPassword') ?? '')
+    const confirmation = String(form.get('confirmation') ?? '')
+    setError('')
+    setNotice('')
+
+    if (!recoveryToken) {
+      setError('Este link de recuperação é inválido ou já expirou.')
+      return
+    }
+    if (newPassword !== confirmation) {
+      setError('A confirmação da nova senha não confere.')
+      return
+    }
+
+    setBusy(true)
+    try {
+      await api.request('reset-password','POST',{token:recoveryToken,newPassword})
+      backToLogin()
+      setNotice('Senha redefinida com sucesso. Entre com a nova senha.')
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -873,48 +940,110 @@ export function App() {
               <span className="brand-mark">Z</span>
               <strong>ZEUS FINANCE</strong>
             </div>
-            <span className="section-kicker">{register ? 'NOVA CONTA' : 'BEM-VINDO DE VOLTA'}</span>
-            <h1>{register ? 'Comece a organizar suas finanças.' : 'Entre no seu painel.'}</h1>
+            <span className="section-kicker">
+              {recoveryMode === 'request' ? 'RECUPERAR ACESSO' : recoveryMode === 'reset' ? 'NOVA SENHA' : register ? 'NOVA CONTA' : 'BEM-VINDO DE VOLTA'}
+            </span>
+            <h1>
+              {recoveryMode === 'request'
+                ? 'Recupere seu acesso.'
+                : recoveryMode === 'reset'
+                  ? 'Crie uma nova senha.'
+                  : register
+                    ? 'Comece a organizar suas finanças.'
+                    : 'Entre no seu painel.'}
+            </h1>
             <p className="auth-subtitle">
-              {register
-                ? 'Crie sua conta e concentre seus registros financeiros em um só lugar.'
-                : 'Use seu e-mail e senha para continuar de onde parou.'}
+              {recoveryMode === 'request'
+                ? 'Informe o e-mail da conta. Se ele estiver cadastrado, você receberá um link válido por 30 minutos.'
+                : recoveryMode === 'reset'
+                  ? 'Escolha uma senha nova com pelo menos 12 caracteres. O link só pode ser usado uma vez.'
+                  : register
+                    ? 'Crie sua conta e concentre seus registros financeiros em um só lugar.'
+                    : 'Use seu e-mail e senha para continuar de onde parou.'}
             </p>
 
-            <form onSubmit={login} className="auth-form">
-              <label>
-                <span>E-mail</span>
-                <input name="email" type="email" autoComplete="email" placeholder="voce@exemplo.com" required maxLength={254} />
-              </label>
-              <label>
-                <span>Senha</span>
-                <input
-                  name="password"
-                  type="password"
-                  autoComplete={register ? 'new-password' : 'current-password'}
-                  minLength={12}
-                  maxLength={128}
-                  placeholder="••••••••••••"
-                  required
-                />
-              </label>
-              <small>Use no mínimo 12 caracteres.</small>
-              <label className="remember-field">
-                <input name="remember" type="checkbox" />
-                <span>
-                  Manter conectado por 30 dias
-                  <small>Use apenas neste dispositivo se ele for confiável.</small>
-                </span>
-              </label>
-              <button className="primary primary--full" disabled={busy}>
-                {busy ? 'Aguarde…' : register ? 'Criar conta' : 'Entrar no ZEUS'}
-                {!busy && <Icon name="arrow" size={18} />}
-              </button>
-            </form>
+            {recoveryMode === 'request' ? (
+              <form onSubmit={requestPasswordReset} className="auth-form">
+                <label>
+                  <span>E-mail</span>
+                  <input name="email" type="email" autoComplete="email" placeholder="voce@exemplo.com" required maxLength={254} />
+                </label>
+                <button className="primary primary--full" disabled={busy}>
+                  {busy ? 'Enviando…' : 'Enviar link de recuperação'}
+                  {!busy && <Icon name="arrow" size={18} />}
+                </button>
+              </form>
+            ) : recoveryMode === 'reset' ? (
+              <form onSubmit={resetForgottenPassword} className="auth-form">
+                <label>
+                  <span>Nova senha</span>
+                  <input name="newPassword" type="password" autoComplete="new-password" minLength={12} maxLength={128} placeholder="••••••••••••" required />
+                </label>
+                <label>
+                  <span>Confirmar nova senha</span>
+                  <input name="confirmation" type="password" autoComplete="new-password" minLength={12} maxLength={128} placeholder="••••••••••••" required />
+                </label>
+                <small>Use entre 12 e 128 caracteres.</small>
+                <button className="primary primary--full" disabled={busy}>
+                  {busy ? 'Salvando…' : 'Salvar nova senha'}
+                  {!busy && <Icon name="shield" size={18} />}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={login} className="auth-form">
+                <label>
+                  <span>E-mail</span>
+                  <input name="email" type="email" autoComplete="email" placeholder="voce@exemplo.com" required maxLength={254} />
+                </label>
+                <label>
+                  <span>Senha</span>
+                  <input
+                    name="password"
+                    type="password"
+                    autoComplete={register ? 'new-password' : 'current-password'}
+                    minLength={12}
+                    maxLength={128}
+                    placeholder="••••••••••••"
+                    required
+                  />
+                </label>
+                <div className="auth-password-help">
+                  <small>Use no mínimo 12 caracteres.</small>
+                  {!register && (
+                    <button
+                      type="button"
+                      className="auth-inline-action"
+                      onClick={() => {
+                        setRecoveryMode('request')
+                        setError('')
+                        setNotice('')
+                      }}
+                    >
+                      Esqueci minha senha
+                    </button>
+                  )}
+                </div>
+                <label className="remember-field">
+                  <input name="remember" type="checkbox" />
+                  <span>
+                    Manter conectado por 30 dias
+                    <small>Use apenas neste dispositivo se ele for confiável.</small>
+                  </span>
+                </label>
+                <button className="primary primary--full" disabled={busy}>
+                  {busy ? 'Aguarde…' : register ? 'Criar conta' : 'Entrar no ZEUS'}
+                  {!busy && <Icon name="arrow" size={18} />}
+                </button>
+              </form>
+            )}
 
-            <button className="switch-auth" onClick={() => { setRegister(!register); setError(''); setNotice('') }}>
-              {register ? 'Já tenho uma conta' : 'Ainda não tenho conta'}
-            </button>
+            {recoveryMode !== 'none' ? (
+              <button className="switch-auth" type="button" onClick={backToLogin}>Voltar para o login</button>
+            ) : (
+              <button className="switch-auth" type="button" onClick={() => { setRegister(!register); setError(''); setNotice('') }}>
+                {register ? 'Já tenho uma conta' : 'Ainda não tenho conta'}
+              </button>
+            )}
             {notice && <p role="status" className="alert alert--success">{notice}</p>}
             {error && <p role="alert" className="alert alert--error">{error}</p>}
           </div>
