@@ -913,6 +913,114 @@ test('Conta: exclusão remove dados próprios e preserva outro usuário', async 
   }
 });
 
+test('Categorias: personaliza, propaga renomeação e isola por usuário', async () => {
+  const dir = mkdtempSync(join(tmpdir(),'zeus-categories-'));
+  const path = join(dir,'categories.sqlite');
+  const db = new SqliteDatabase(path);
+  const repository = new FinanceRepository(db);
+  const auth = new AuthService(repository);
+
+  try {
+    const owner = await auth.login({
+      email:'categories-owner@example.com',
+      password:'secure-categories-owner-123',
+    },true,'categories-owner');
+    const other = await auth.login({
+      email:'categories-other@example.com',
+      password:'secure-categories-other-123',
+    },true,'categories-other');
+
+    const defaults = await repository.listCategories(owner.user.id);
+    assert.equal(defaults.length,5);
+    assert.ok(defaults.every(category => category.isDefault));
+    assert.ok(defaults.some(category => category.name === 'Casa' && category.color === '#58d6a3'));
+
+    const pets = await repository.addCategory(owner.user.id,{
+      name:'Pets',
+      color:'#12abef',
+    });
+    assert.equal(pets.name,'Pets');
+    assert.equal(pets.color,'#12abef');
+    assert.equal(pets.isDefault,false);
+
+    await assert.rejects(
+      repository.addCategory(owner.user.id,{name:'pets',color:'#ffffff'}),
+      error => error.status === 409,
+    );
+
+    await assert.rejects(
+      repository.add(owner.user.id,'transactions',{
+        name:'Categoria inválida',
+        category:'Não cadastrada',
+        value:10,
+        transactionDate:'2026-09-01',
+      }),
+      error => error.status === 400,
+    );
+
+    const expense = await repository.add(owner.user.id,'transactions',{
+      name:'Ração',
+      category:'Pets',
+      value:120,
+      transactionDate:'2026-09-10',
+    });
+    const budget = await repository.upsertBudget(owner.user.id,{
+      month:'2026-09',
+      category:'Pets',
+      limit:300,
+    });
+    const recurring = await repository.addRecurringExpense(owner.user.id,{
+      name:'Plano veterinário',
+      category:'Pets',
+      value:80,
+      dueDay:15,
+      activeFrom:'2026-01-01',
+      active:true,
+    });
+
+    const renamed = await repository.updateCategory(owner.user.id,pets.id,{
+      name:'Animais',
+      color:'#abcdef',
+    });
+    assert.equal(renamed.name,'Animais');
+    assert.equal(renamed.color,'#abcdef');
+
+    const expenses = await repository.list(owner.user.id,'transactions');
+    assert.equal(expenses.find(item => item.id === expense.id).category,'Animais');
+    const budgets = await repository.listBudgets(owner.user.id,'2026-09');
+    assert.equal(budgets.find(item => item.id === budget.id).category,'Animais');
+    const recurringEntries = await repository.listRecurringExpenses(owner.user.id);
+    assert.equal(recurringEntries.find(item => item.id === recurring.id).category,'Animais');
+
+    const dashboard = await repository.dashboard(owner.user.id,'2026-09');
+    const categorySummary = dashboard.categoriesData.find(item => item.category === 'Animais');
+    assert.equal(categorySummary.total,120);
+    assert.equal(categorySummary.color,'#abcdef');
+    const categoryBudget = dashboard.budgetData.find(item => item.category === 'Animais');
+    assert.equal(categoryBudget.limit,300);
+    assert.equal(categoryBudget.color,'#abcdef');
+
+    await assert.rejects(
+      repository.removeCategory(owner.user.id,pets.id),
+      error => error.status === 409,
+    );
+
+    const otherCategories = await repository.listCategories(other.user.id);
+    assert.equal(otherCategories.length,5);
+    assert.equal(otherCategories.some(category => category.name === 'Animais'),false);
+
+    await repository.remove(owner.user.id,'transactions',expense.id);
+    await repository.removeBudget(owner.user.id,budget.id);
+    await repository.removeRecurringExpense(owner.user.id,recurring.id);
+    const removed = await repository.removeCategory(owner.user.id,pets.id);
+    assert.equal(removed.deleted,true);
+    assert.equal((await repository.listCategories(owner.user.id)).some(category => category.name === 'Animais'),false);
+  } finally {
+    await db.close();
+    rmSync(dir,{recursive:true,force:true});
+  }
+});
+
 test('Backup: restaura JSON v2 com vínculos e rejeita arquivo inválido sem perder dados', async () => {
   const dir = mkdtempSync(join(tmpdir(),'zeus-backup-restore-'));
   const path = join(dir,'backup.sqlite');
