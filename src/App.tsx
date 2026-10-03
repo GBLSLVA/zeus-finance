@@ -47,6 +47,7 @@ type BackupRestoreResult = {
   sourceEmail: string
   exportedAt: string
   counts: {
+    categories: number
     transactions: number
     goals: number
     goalMovements: number
@@ -456,8 +457,11 @@ export function App() {
       return
     }
 
-    if (payload?.format !== 'zeus-finance-backup' || payload?.version !== 2) {
-      setError('Backup incompatível. Selecione um backup JSON v2 gerado pelo ZEUS.')
+    if (
+      payload?.format !== 'zeus-finance-backup'
+      || (payload?.version !== 2 && payload?.version !== 3)
+    ) {
+      setError('Backup incompatível. Selecione um backup JSON v2 ou v3 gerado pelo ZEUS.')
       return
     }
 
