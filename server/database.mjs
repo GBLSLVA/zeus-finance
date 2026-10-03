@@ -687,7 +687,7 @@ export async function openDatabase({ sqlitePath, allowSqliteProduction = false }
   }
 
   const sqliteAllowedInProduction = allowSqliteProduction || process.env.ALLOW_SQLITE_PRODUCTION === '1';
-  const productionEnvironment = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+  const productionEnvironment = process.env.NODE_ENV === 'production';
   if (productionEnvironment && !sqliteAllowedInProduction) {
     throw new Error(
       'DATABASE_URL é obrigatório em produção. O ZEUS não inicia com SQLite efêmero para evitar perda de usuários e dados após reinícios.',

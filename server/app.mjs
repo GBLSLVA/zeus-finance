@@ -490,8 +490,8 @@ export class FinanceApi {
             status:'ok',
             database,
             persistent:database === 'postgres',
-            environment:process.env.RENDER === 'true' ? 'render' : (process.env.NODE_ENV ?? 'development'),
-            commit:process.env.RENDER_GIT_COMMIT?.slice(0,12) ?? null,
+            environment:process.env.RAILWAY_ENVIRONMENT_NAME ?? process.env.NODE_ENV ?? 'development',
+            commit:process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0,12) ?? null,
           });
         } catch (error) {
           console.error('Health check database error:', error);

@@ -49,7 +49,7 @@ Funcionalidades principais:
 | Interface | React 18, TypeScript, TSX |
 | Visual | HTML5, CSS3, Grid, Flexbox, media queries |
 | Servidor | Node.js 24, ES Modules, node:http |
-| Banco | SQLite, SQL, node:sqlite |
+| Banco | SQLite (desenvolvimento), PostgreSQL (produção), SQL |
 | Segurança | scrypt, SHA-256, cookies HttpOnly/SameSite |
 | Build | Vite, Rollup |
 | Testes | node:test, node:assert/strict |
@@ -246,18 +246,26 @@ A evolução do ZEUS segue estes critérios:
 - App.tsx atua progressivamente como controlador de estado, carregamento e navegação, enquanto a apresentação fica nas features;
 - refatorações estruturais só entram na `main` depois de testes de API, build, smoke e PostgreSQL.
 
-## Deploy em nuvem e containers
+## Deploy em produção no Railway
 
-O ZEUS é portável entre provedores e possui preparação para **Hostnet App Cloud**, Render e outros ambientes compatíveis com Docker.
+A produção oficial do ZEUS Finance roda no **Railway**.
 
-- Em desenvolvimento local, continua usando SQLite.
-- Em produção, exige PostgreSQL persistente via `DATABASE_URL`.
-- `npm start` escolhe automaticamente o servidor local ou de produção com base em `NODE_ENV`.
-- O `Dockerfile` gera uma imagem Node.js 24 multi-stage e executa o processo como usuário não-root.
-- O container expõe a porta `10000` e possui healthcheck em `/api/health`.
-- O workflow `.github/workflows/container.yml` testa a imagem e publica `ghcr.io/gblslva/zeus-finance:latest` após commits na `main`.
-- A migração do Render para a Hostnet está documentada em [HOSTNET_DEPLOY.md](./HOSTNET_DEPLOY.md).
-- A configuração anterior do Render continua disponível em `render.yaml` enquanto o corte de produção não for concluído.
+Arquitetura atual:
+
+```text
+GitHub (GBLSLVA/zeus-finance, branch main)
+  -> Railway / serviço zeus-finance (React + Node.js)
+      -> Railway / serviço Postgres
+```
+
+- O frontend React e a API Node.js são entregues pelo mesmo serviço `zeus-finance`.
+- O PostgreSQL de produção é um serviço separado no mesmo projeto Railway e usa volume persistente.
+- A aplicação recebe a conexão por `DATABASE_URL`.
+- O healthcheck de produção é `GET /api/health`.
+- O domínio Railway atual é `zeus-finance-production.up.railway.app`.
+- O Railway acompanha a branch `main`; novos commits aprovados nela podem gerar novos deployments.
+- O `Dockerfile` e o workflow de container permanecem como validação e portabilidade, mas não representam outra hospedagem ativa.
+- O procedimento operacional está documentado em [RAILWAY_DEPLOY.md](./RAILWAY_DEPLOY.md).
 
 ## Próximos passos planejados
 
