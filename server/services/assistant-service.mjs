@@ -1,4 +1,4 @@
-import { categories, monthOnly, text } from '../domain/finance-values.mjs';
+import { monthOnly, text } from '../domain/finance-values.mjs';
 import { moneyText, normalizeQuestion } from './finance-service-utils.mjs';
 
 export class AssistantService {
@@ -33,7 +33,11 @@ export class AssistantService {
       suggestions,
     });
 
-    const mentionedCategory = categories.find(category =>
+    const categoryNames = [...new Set([
+      ...dashboard.budgetData.map(item => item.category),
+      ...dashboard.categoriesData.map(item => item.category),
+    ])];
+    const mentionedCategory = categoryNames.find(category =>
       normalized.includes(normalizeQuestion(category)),
     );
 
