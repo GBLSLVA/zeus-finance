@@ -1,6 +1,7 @@
 import { HttpError } from '../http-error.mjs';
 import {
-  categories,
+  categoryColor,
+  defaultCategories,
   cents,
   dateOnly,
   monthOnly,
@@ -8,6 +9,7 @@ import {
   normalizeIncome,
   text,
 } from '../domain/finance-values.mjs';
+import { normalizeCategory } from '../repositories/category-repository.mjs';
 import { normalizeDebt, normalizeDebtPayment } from '../repositories/debt-repository.mjs';
 import { normalizeEntry } from '../repositories/entry-repository.mjs';
 import { normalizeGoalMovement } from '../repositories/goal-repository.mjs';
@@ -55,18 +57,46 @@ const uniqueIds = (items, label) => {
   }
 };
 
-const categoryValue = value => {
-  const category = text(value);
-  if (!categories.includes(category)) throw new HttpError(400,'Backup inválido: categoria desconhecida.');
-  return category;
+const categoryValue = value => text(value,60);
+
+const validateCategoryList = backup => {
+  const source = backup.version === 3
+    ? requiredArray(backup,'categories')
+    : defaultCategories.map((category,index) => ({
+        id:index + 1,
+        name:category.name,
+        color:category.color,
+        isDefault:true,
+      }));
+
+  if (!source.length) throw new HttpError(400,'Backup inválido: nenhuma categoria cadastrada.');
+
+  const categories = source.map(item => ({
+    sourceId:positiveId(item?.id,'ID de categoria'),
+    name:categoryValue(item.name),
+    color:categoryColor(item.color),
+    isDefault:strictBoolean(item.isDefault,'tipo de categoria'),
+  }));
+  uniqueIds(categories,'categorias');
+
+  const names = new Set();
+  for (const category of categories) {
+    const key = category.name.toLocaleLowerCase('pt-BR');
+    if (names.has(key)) throw new HttpError(400,'Backup inválido: categoria duplicada.');
+    names.add(key);
+  }
+  return categories;
 };
 
 const validateBackup = backup => {
   if (!backup || typeof backup !== 'object' || Array.isArray(backup)) {
     throw new HttpError(400,'Backup inválido.');
   }
-  if (backup.format !== 'zeus-finance-backup' || backup.version !== 2) {
-    throw new HttpError(400,'Backup incompatível. Use um backup JSON v2 gerado pelo ZEUS.');
+  if (
+    backup.format !== 'zeus-finance-backup'
+    || (backup.version !== 2 && backup.version !== 3)
+  ) {
+    throw new HttpError(400,'Backup incompatível. Use um backup JSON v2 ou v3 gerado pelo ZEUS.');
   }
   if (typeof backup.exportedAt !== 'string' || Number.isNaN(Date.parse(backup.exportedAt))) {
     throw new HttpError(400,'Backup inválido: data de exportação.');
@@ -77,6 +107,8 @@ const validateBackup = backup => {
   if (!sourceEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sourceEmail)) {
     throw new HttpError(400,'Backup inválido: conta de origem.');
   }
+
+  const backupCategories = validateCategoryList(backup);
 
   const recurringExpenses = requiredArray(backup,'recurringExpenses').map(item => {
     const sourceId = positiveId(item?.id,'ID de gasto recorrente');
@@ -304,9 +336,34 @@ const validateBackup = backup => {
     budgetKeys.add(key);
   }
 
+  const categoryNames = new Set(
+    backupCategories.map(category => category.name.toLocaleLowerCase('pt-BR')),
+  );
+  const usedCategories = [
+    ...transactions.map(item => item.category),
+    ...recurringExpenses.map(item => item.category),
+    ...budgets.map(item => item.category),
+  ];
+  for (const name of usedCategories) {
+    const key = name.toLocaleLowerCase('pt-BR');
+    if (categoryNames.has(key)) continue;
+    if (backup.version === 2) {
+      backupCategories.push({
+        sourceId:backupCategories.length + 1,
+        name,
+        color:defaultCategories.find(item => item.name === name)?.color ?? '#7ca8ff',
+        isDefault:Boolean(defaultCategories.find(item => item.name === name)),
+      });
+      categoryNames.add(key);
+      continue;
+    }
+    throw new HttpError(400,`Backup inválido: categoria "${name}" não existe na seção de categorias.`);
+  }
+
   return {
     exportedAt:backup.exportedAt,
     sourceEmail,
+    categories:backupCategories,
     transactions,
     goals,
     goalMovements,
@@ -356,11 +413,17 @@ export class ExportService {
       [user],
     )).recordset;
 
+    const categories = (await this.database.query(
+      'SELECT * FROM finance_categories WHERE user_id=? ORDER BY is_default DESC,id',
+      [user],
+    )).recordset;
+
     return {
       format: 'zeus-finance-backup',
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
       account: {email:account.email},
+      categories: categories.map(normalizeCategory),
       transactions: entries.filter(row => row.kind === 'transactions').map(normalizeEntry),
       goals: entries.filter(row => row.kind === 'goals').map(normalizeEntry),
       goalMovements: goalMovements.map(normalizeGoalMovement),
@@ -386,6 +449,15 @@ export class ExportService {
       await database.query('DELETE FROM budgets WHERE user_id=?',[user]);
       await database.query('DELETE FROM incomes WHERE user_id=?',[user]);
       await database.query('DELETE FROM recurring_expenses WHERE user_id=?',[user]);
+
+      await database.query('DELETE FROM finance_categories WHERE user_id=?',[user]);
+
+      for (const category of data.categories) {
+        await database.query(
+          'INSERT INTO finance_categories(user_id,name,color,is_default,updated_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP)',
+          [user,category.name,category.color,category.isDefault ? 1 : 0],
+        );
+      }
 
       const recurringMap = new Map();
       for (const item of data.recurringExpenses) {
@@ -455,6 +527,7 @@ export class ExportService {
         sourceEmail:data.sourceEmail,
         exportedAt:data.exportedAt,
         counts:{
+          categories:data.categories.length,
           transactions:data.transactions.length,
           goals:data.goals.length,
           goalMovements:data.goalMovements.length,
