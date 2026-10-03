@@ -20,14 +20,13 @@ export class CategoryRepository {
       await database.query(
         `INSERT INTO finance_categories(user_id,name,color,is_default,updated_at)
          VALUES(?,?,?,?,CURRENT_TIMESTAMP)
-         ON CONFLICT(user_id,name) DO NOTHING`,
+         ON CONFLICT DO NOTHING`,
         [user,category.name,category.color,1],
       );
     }
   }
 
   async list(user) {
-    await this.ensureDefaults(user);
     const result = await this.database.query(
       'SELECT * FROM finance_categories WHERE user_id=? ORDER BY is_default DESC,id',
       [user],
@@ -54,7 +53,6 @@ export class CategoryRepository {
     const color = categoryColor(data.color ?? '#7ca8ff');
 
     return this.database.transaction(async database => {
-      await this.ensureDefaults(user,database);
       const existing = await this.findByName(user,name,database);
       if (existing) throw new HttpError(409,'Já existe uma categoria com este nome.');
 
@@ -122,6 +120,14 @@ export class CategoryRepository {
         [user,id],
       )).recordset[0];
       if (!category) throw new HttpError(404,'Categoria não encontrada.');
+
+      const totalCategories = Number((await database.query(
+        'SELECT COUNT(*) AS total FROM finance_categories WHERE user_id=?',
+        [user],
+      )).recordset[0].total);
+      if (totalCategories <= 1) {
+        throw new HttpError(409,'Mantenha pelo menos uma categoria na conta.');
+      }
 
       const [entryUse, recurringUse, budgetUse] = await Promise.all([
         database.query('SELECT COUNT(*) AS total FROM entries WHERE user_id=? AND category=?',[user,category.name]),
