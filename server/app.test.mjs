@@ -912,6 +912,134 @@ test('Conta: exclusão remove dados próprios e preserva outro usuário', async 
   }
 });
 
+test('Backup: restaura JSON v2 com vínculos e rejeita arquivo inválido sem perder dados', async () => {
+  const dir = mkdtempSync(join(tmpdir(),'zeus-backup-restore-'));
+  const path = join(dir,'backup.sqlite');
+  const db = new SqliteDatabase(path);
+  const repository = new FinanceRepository(db);
+  const auth = new AuthService(repository);
+
+  try {
+    const source = await auth.login({
+      email:'backup-source@example.com',
+      password:'secure-backup-source-123',
+    },true,'backup-source');
+
+    await repository.add(source.user.id,'transactions',{
+      name:'Mercado',
+      category:'Comida',
+      value:180.75,
+      transactionDate:'2026-09-04',
+    });
+    const goal = await repository.add(source.user.id,'goals',{
+      name:'Reserva',
+      target:2000,
+      saved:300,
+    });
+    await repository.addGoalMovement(source.user.id,goal.id,{
+      type:'deposit',
+      amount:200,
+      movementDate:'2026-09-05',
+      note:'Aporte',
+    });
+    await repository.addIncome(source.user.id,{
+      name:'Salário',
+      type:'salary',
+      value:4200,
+      activeFrom:'2026-01-01',
+      active:true,
+    });
+    const debt = await repository.addDebt(source.user.id,{
+      name:'Notebook',
+      creditor:'Loja',
+      originalAmount:1200,
+      interestRate:0,
+      installmentsTotal:6,
+      dueDay:12,
+    });
+    await repository.addDebtPayment(source.user.id,debt.id,{
+      amount:200,
+      paymentDate:'2026-09-12',
+      note:'Primeira parcela',
+      countsAsInstallment:true,
+    });
+    await repository.upsertBudget(source.user.id,{
+      month:'2026-09',
+      category:'Comida',
+      limit:700,
+    });
+    const recurring = await repository.addRecurringExpense(source.user.id,{
+      name:'Internet',
+      category:'Casa',
+      value:120,
+      dueDay:10,
+      activeFrom:'2026-01-01',
+      active:true,
+    });
+    await repository.recordRecurringExpensePayment(source.user.id,recurring.id,{
+      month:'2026-09',
+      paymentDate:'2026-09-10',
+    });
+
+    const backup = await repository.exportUserData(source.user.id);
+
+    const target = await auth.login({
+      email:'backup-target@example.com',
+      password:'secure-backup-target-123',
+    },true,'backup-target');
+    await repository.add(target.user.id,'transactions',{
+      name:'Dado que será substituído',
+      category:'Outros',
+      value:1,
+      transactionDate:'2026-09-01',
+    });
+
+    const restored = await repository.restoreUserData(target.user.id,backup);
+    assert.equal(restored.restored,true);
+    assert.equal(restored.sourceEmail,'backup-source@example.com');
+    assert.equal(restored.counts.transactions,2);
+    assert.equal(restored.counts.goals,1);
+    assert.equal(restored.counts.goalMovements,2);
+    assert.equal(restored.counts.debts,1);
+    assert.equal(restored.counts.debtPayments,1);
+    assert.equal(restored.counts.recurringExpenses,1);
+
+    const targetBackup = await repository.exportUserData(target.user.id);
+    assert.equal(targetBackup.account.email,'backup-target@example.com');
+    assert.deepEqual(
+      targetBackup.transactions.map(item => item.name).sort(),
+      ['Internet','Mercado'],
+    );
+    assert.equal(targetBackup.goals[0].saved,500);
+    assert.equal(targetBackup.goalMovements.length,2);
+    assert.equal(targetBackup.goalMovements.every(item => item.goalId === targetBackup.goals[0].id),true);
+    assert.equal(targetBackup.debts[0].currentBalance,1000);
+    assert.equal(targetBackup.debtPayments[0].debtId,targetBackup.debts[0].id);
+    assert.equal(targetBackup.recurringExpenses.length,1);
+    const recurringTransaction = targetBackup.transactions.find(item => item.name === 'Internet');
+    assert.equal(recurringTransaction.recurringExpenseId,targetBackup.recurringExpenses[0].id);
+    assert.equal(recurringTransaction.recurringMonth,'2026-09');
+
+    const invalidBackup = structuredClone(backup);
+    invalidBackup.transactions[0].category = 'Categoria inexistente';
+    await assert.rejects(
+      repository.restoreUserData(target.user.id,invalidBackup),
+      error => error.status === 400,
+    );
+
+    const afterRejectedRestore = await repository.exportUserData(target.user.id);
+    assert.deepEqual(
+      afterRejectedRestore.transactions.map(item => item.name).sort(),
+      ['Internet','Mercado'],
+    );
+    assert.equal(afterRejectedRestore.goals[0].saved,500);
+    assert.equal(afterRejectedRestore.debts[0].currentBalance,1000);
+  } finally {
+    await db.close();
+    rmSync(dir,{recursive:true,force:true});
+  }
+});
+
 test('Banco: migra uma base antiga sem perder registros', async () => {
   const dir = mkdtempSync(join(tmpdir(),'zeus-migration-'));
   const path = join(dir,'legacy.sqlite');

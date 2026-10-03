@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 export type IconName =
   | 'overview' | 'income' | 'budget' | 'wallet' | 'debt' | 'goal'
   | 'logout' | 'plus' | 'menu' | 'close' | 'arrow' | 'edit' | 'trash'
-  | 'shield' | 'calendar' | 'download'
+  | 'shield' | 'calendar' | 'download' | 'upload'
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   const common = {
@@ -35,6 +35,7 @@ export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
     shield: <><path d="M12 3 5 6v5c0 4.7 2.7 8 7 10 4.3-2 7-5.3 7-10V6l-7-3Z" /><path d="m9.5 12 1.7 1.7 3.6-4" /></>,
     calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M8 3v4" /><path d="M16 3v4" /><path d="M3 10h18" /></>,
     download: <><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></>,
+    upload: <><path d="M12 21V9" /><path d="m7 14 5-5 5 5" /><path d="M5 3h14" /></>,
   }
 
   return <svg {...common}>{paths[name]}</svg>

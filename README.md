@@ -14,6 +14,7 @@ Funcionalidades principais:
 - Recuperação de senha por e-mail com token de uso único, hash SHA-256 no banco, validade de 30 minutos e revogação de sessões após a redefinição.
 - Exclusão segura da conta, com confirmação por senha e remoção transacional dos dados do usuário.
 - Exportação completa dos dados da conta em backup JSON v2 isolado por usuário, incluindo movimentações de metas.
+- Restauração segura de backup JSON v2, com validação integral, reconstrução de vínculos e substituição transacional dos dados financeiros.
 - Exportação CSV compatível com Excel/Google Sheets, com separador regional e proteção contra fórmulas em campos de texto.
 - Cadastro, edição, listagem e exclusão de gastos, dívidas, metas e receitas.
 - Metas com histórico de aportes, retiradas, saldo inicial e correção de movimentações.
@@ -252,7 +253,6 @@ Prioridades seguintes:
 - ampliar o assistente conversacional com histórico de perguntas e linguagem natural mais flexível;
 - categorias personalizadas;
 - exportação PDF;
-- restauração de backup JSON;
 - PWA e deploy HTTPS.
 
 ## Autor
