@@ -1242,46 +1242,69 @@ export function App() {
         </nav>
 
         <div className="sidebar__bottom">
-          <div className="account-card">
-            <span className="account-avatar">{user.email.slice(0, 1).toUpperCase()}</span>
-            <div>
-              <strong>{user.email}</strong>
-              <span>Conta ativa</span>
+          <details className="account-menu">
+            <summary className="account-card account-card--interactive">
+              <span className="account-avatar">{user.email.slice(0, 1).toUpperCase()}</span>
+              <div className="account-card__identity">
+                <strong>{user.email}</strong>
+                <span className="account-card__status"><i aria-hidden="true" />Conta ativa</span>
+              </div>
+              <span className="account-menu__chevron" aria-hidden="true">›</span>
+            </summary>
+
+            <div className="account-menu__panel">
+              <div className="account-menu__header">
+                <span>Minha conta</span>
+                <strong>{user.email}</strong>
+              </div>
+
+              <div className="account-menu__group">
+                <span className="account-menu__label">Dados</span>
+                <button className="account-menu__action" onClick={exportAccountData} disabled={exportBusy}>
+                  <Icon name="download" size={17} />
+                  {exportBusy ? 'Exportando…' : 'Fazer backup'}
+                </button>
+                <button className="account-menu__action" onClick={exportAccountCsv} disabled={exportBusy}>
+                  <Icon name="download" size={17} />
+                  {exportBusy ? 'Exportando…' : 'Exportar CSV'}
+                </button>
+                <button
+                  className="account-menu__action"
+                  onClick={() => document.getElementById('restore-backup-input')?.click()}
+                  disabled={restoreBusy || exportBusy}
+                >
+                  <Icon name="upload" size={17} />
+                  {restoreBusy ? 'Restaurando…' : 'Restaurar backup'}
+                </button>
+                <input
+                  id="restore-backup-input"
+                  type="file"
+                  accept="application/json,.json"
+                  hidden
+                  disabled={restoreBusy}
+                  onChange={restoreBackupFile}
+                />
+              </div>
+
+              <div className="account-menu__group">
+                <span className="account-menu__label">Segurança</span>
+                <button className="account-menu__action" onClick={openPasswordDialog}>
+                  <Icon name="shield" size={17} />
+                  Alterar senha
+                </button>
+              </div>
+
+              <div className="account-menu__group account-menu__group--danger">
+                <span className="account-menu__label">Zona de perigo</span>
+                <button className="account-menu__action account-menu__action--danger" onClick={openDeleteAccountDialog}>
+                  <Icon name="trash" size={17} />
+                  Excluir conta
+                </button>
+              </div>
             </div>
-          </div>
-          <button className="logout-button account-action-button" onClick={exportAccountData} disabled={exportBusy}>
-            <Icon name="download" size={18} />
-            {exportBusy ? 'Exportando…' : 'Backup JSON'}
-          </button>
-          <button className="logout-button account-action-button" onClick={exportAccountCsv} disabled={exportBusy}>
-            <Icon name="download" size={18} />
-            {exportBusy ? 'Exportando…' : 'Exportar CSV'}
-          </button>
-          <button
-            className="logout-button account-action-button"
-            onClick={() => document.getElementById('restore-backup-input')?.click()}
-            disabled={restoreBusy || exportBusy}
-          >
-            <Icon name="upload" size={18} />
-            {restoreBusy ? 'Restaurando…' : 'Restaurar backup'}
-          </button>
-          <input
-            id="restore-backup-input"
-            type="file"
-            accept="application/json,.json"
-            hidden
-            disabled={restoreBusy}
-            onChange={restoreBackupFile}
-          />
-          <button className="logout-button account-action-button" onClick={openPasswordDialog}>
-            <Icon name="shield" size={18} />
-            Alterar senha
-          </button>
-          <button className="logout-button delete-account-button" onClick={openDeleteAccountDialog}>
-            <Icon name="trash" size={18} />
-            Excluir conta
-          </button>
-          <button className="logout-button" onClick={logout}>
+          </details>
+
+          <button className="logout-button sidebar-logout" onClick={logout}>
             <Icon name="logout" size={18} />
             Sair da conta
           </button>
