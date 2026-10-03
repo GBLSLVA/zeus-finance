@@ -1,0 +1,15 @@
+.git
+.github
+node_modules
+dist
+data
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+coverage
+.DS_Store
+Thumbs.db
+ZEUS_Finance_*.pdf
+ZEUS_Finance_*.docx
