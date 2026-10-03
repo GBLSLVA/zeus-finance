@@ -1,5 +1,6 @@
 import { HttpError } from '../http-error.mjs';
-import { categories, cents, dateOnly, text, today } from '../domain/finance-values.mjs';
+import { cents, dateOnly, text, today } from '../domain/finance-values.mjs';
+import { CategoryRepository } from './category-repository.mjs';
 
 export const normalizeEntry = row => ({
   id: row.id,
@@ -16,8 +17,9 @@ export const normalizeEntry = row => ({
 });
 
 export class EntryRepository {
-  constructor(database) {
+  constructor(database, categories = new CategoryRepository(database)) {
     this.database = database;
+    this.categories = categories;
   }
 
   assertKind(kind) {
@@ -26,15 +28,13 @@ export class EntryRepository {
     }
   }
 
-  fields(kind, data) {
+  async fields(user, kind, data) {
     this.assertKind(kind);
     const name = text(data.name);
     const amount = cents(kind === 'goals' ? data.target : data.value);
-    const category = kind === 'transactions' ? text(data.category) : null;
-
-    if (category && !categories.includes(category)) {
-      throw new HttpError(400, 'Categoria inválida.');
-    }
+    const category = kind === 'transactions'
+      ? await this.categories.require(user,text(data.category))
+      : null;
 
     const saved = kind === 'goals' ? cents(data.saved ?? 0, true) : 0;
     if (kind === 'goals' && saved > amount) {
@@ -58,7 +58,7 @@ export class EntryRepository {
   }
 
   async add(user, kind, data) {
-    const fields = this.fields(kind,data);
+    const fields = await this.fields(user,kind,data);
     const result = await this.database.query(
       'INSERT INTO entries(user_id,kind,name,category,amount,saved,transaction_date,updated_at) VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP) RETURNING id',
       [user,kind,fields.name,fields.category,fields.amount,fields.saved,fields.transactionDate],
@@ -67,7 +67,7 @@ export class EntryRepository {
   }
 
   async update(user, kind, id, data) {
-    const fields = this.fields(kind,data);
+    const fields = await this.fields(user,kind,data);
     const result = await this.database.query(
       'UPDATE entries SET name=?,category=?,amount=?,saved=?,transaction_date=COALESCE(?,transaction_date),updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND kind=? AND id=?',
       [fields.name,fields.category,fields.amount,fields.saved,fields.transactionDate,user,kind,id],
