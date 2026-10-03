@@ -3,6 +3,7 @@ import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypt
 import { HttpError } from './http-error.mjs';
 import { text } from './domain/finance-values.mjs';
 import { BudgetRepository } from './repositories/budget-repository.mjs';
+import { CategoryRepository } from './repositories/category-repository.mjs';
 import { DebtRepository } from './repositories/debt-repository.mjs';
 import { EntryRepository } from './repositories/entry-repository.mjs';
 import { GoalRepository } from './repositories/goal-repository.mjs';
@@ -41,11 +42,12 @@ export class FinanceRepository {
   constructor(database) {
     this.db = database;
     this.users = new UserRepository(database);
-    this.entries = new EntryRepository(database);
+    this.categories = new CategoryRepository(database);
+    this.entries = new EntryRepository(database,this.categories);
     this.goals = new GoalRepository(database);
     this.debts = new DebtRepository(database);
-    this.budgets = new BudgetRepository(database);
-    this.recurring = new RecurringExpenseRepository(database);
+    this.budgets = new BudgetRepository(database,this.categories);
+    this.recurring = new RecurringExpenseRepository(database,this.categories);
     this.incomes = new IncomeRepository(database);
 
     this.dashboardService = new DashboardService({
@@ -55,6 +57,7 @@ export class FinanceRepository {
       incomes:this.incomes,
       budgets:this.budgets,
       recurring:this.recurring,
+      categories:this.categories,
     });
     this.insightService = new InsightService({
       entries:this.entries,
@@ -62,6 +65,7 @@ export class FinanceRepository {
       debts:this.debts,
       incomes:this.incomes,
       budgets:this.budgets,
+      categories:this.categories,
     });
     this.assistantService = new AssistantService({
       dashboard:this.dashboardService,
@@ -156,6 +160,22 @@ export class FinanceRepository {
 
   async removeDebtPayment(user, debtId, paymentId) {
     return this.debts.removePayment(user,debtId,paymentId);
+  }
+
+  async listCategories(user) {
+    return this.categories.list(user);
+  }
+
+  async addCategory(user, data) {
+    return this.categories.add(user,data);
+  }
+
+  async updateCategory(user, id, data) {
+    return this.categories.update(user,id,data);
+  }
+
+  async removeCategory(user, id) {
+    return this.categories.remove(user,id);
   }
 
   async listBudgets(user, month) {
@@ -515,6 +535,20 @@ export class FinanceApi {
       if (path === '/api/delete-account' && req.method === 'POST') {
         await this.auth.deleteAccount(user,await this.body(req));
         return send(200,{deleted:true},{'Set-Cookie':`zeus_session=; HttpOnly; SameSite=Strict; Path=/api; Max-Age=0${secure}`});
+      }
+
+      if (path === '/api/categories') {
+        if (req.method === 'GET') return send(200,await this.repository.listCategories(user));
+        if (req.method === 'POST') return send(201,await this.repository.addCategory(user,await this.body(req)));
+        throw new HttpError(405,'Método não permitido.');
+      }
+
+      const categoryRoute = /^\/api\/categories\/(\d+)$/.exec(path);
+      if (categoryRoute) {
+        const id = Number(categoryRoute[1]);
+        if (req.method === 'PUT') return send(200,await this.repository.updateCategory(user,id,await this.body(req)));
+        if (req.method === 'DELETE') return send(200,await this.repository.removeCategory(user,id));
+        throw new HttpError(405,'Método não permitido.');
       }
 
       if (path === '/api/budgets') {
