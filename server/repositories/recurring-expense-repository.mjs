@@ -1,12 +1,12 @@
 import { HttpError } from '../http-error.mjs';
 import {
-  categories,
   cents,
   dateOnly,
   monthOnly,
   text,
   today,
 } from '../domain/finance-values.mjs';
+import { CategoryRepository } from './category-repository.mjs';
 import { normalizeEntry } from './entry-repository.mjs';
 
 export const normalizeRecurringExpense = row => ({
@@ -35,14 +35,14 @@ const monthBounds = monthKey => {
 };
 
 export class RecurringExpenseRepository {
-  constructor(database) {
+  constructor(database, categories = new CategoryRepository(database)) {
     this.database = database;
+    this.categories = categories;
   }
 
-  fields(data) {
+  async fields(user, data) {
     const name = text(data.name);
-    const category = text(data.category);
-    if (!categories.includes(category)) throw new HttpError(400, 'Categoria inválida.');
+    const category = await this.categories.require(user,text(data.category));
 
     const amount = cents(data.value);
     const dueDay = Number(data.dueDay);
@@ -74,7 +74,7 @@ export class RecurringExpenseRepository {
   }
 
   async add(user, data) {
-    const fields = this.fields(data);
+    const fields = await this.fields(user,data);
     const result = await this.database.query(
       'INSERT INTO recurring_expenses(user_id,name,category,amount,due_day,active_from,active_until,active,updated_at) VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) RETURNING id',
       [user,fields.name,fields.category,fields.amount,fields.dueDay,fields.activeFrom,fields.activeUntil,fields.active],
@@ -83,7 +83,7 @@ export class RecurringExpenseRepository {
   }
 
   async update(user, id, data) {
-    const fields = this.fields(data);
+    const fields = await this.fields(user,data);
     const result = await this.database.query(
       'UPDATE recurring_expenses SET name=?,category=?,amount=?,due_day=?,active_from=?,active_until=?,active=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=?',
       [fields.name,fields.category,fields.amount,fields.dueDay,fields.activeFrom,fields.activeUntil,fields.active,user,id],

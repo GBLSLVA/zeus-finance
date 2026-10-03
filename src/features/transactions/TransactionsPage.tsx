@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react'
 import { Icon } from '../../components/Icon'
-import { categories, type EditState, type Entry } from '../../domain/finance'
+import { type EditState, type Entry, type FinanceCategory } from '../../domain/finance'
 import { currentDateKey, money } from '../../utils/finance'
 
 type Props = {
@@ -11,6 +11,7 @@ type Props = {
   onEdit: (entry: Entry) => void
   onRemove: (id: number) => void
   onCancelEdit: () => void
+  categories: FinanceCategory[]
 }
 
 export function TransactionsPage({
@@ -21,6 +22,7 @@ export function TransactionsPage({
   onEdit,
   onRemove,
   onCancelEdit,
+  categories,
 }: Props) {
   const editingTransaction = editing?.kind === 'transactions' ? editing.entry : null
 
@@ -87,8 +89,8 @@ export function TransactionsPage({
           </label>
           <label>
             <span>Categoria</span>
-            <select name="category" defaultValue={editingTransaction?.category ?? categories[0]}>
-              {categories.map(category => <option key={category}>{category}</option>)}
+            <select name="category" defaultValue={editingTransaction?.category ?? categories[0]?.name ?? ''} required>
+              {categories.map(category => <option key={category.id} value={category.name}>{category.name}</option>)}
             </select>
           </label>
           <label>

@@ -1,3 +1,5 @@
+import { defaultCategories } from '../domain/finance-values.mjs';
+
 export class UserRepository {
   constructor(database) {
     this.database = database;
@@ -12,12 +14,25 @@ export class UserRepository {
   }
 
   async create(email, passwordHash) {
-    const result = await this.database.query(
-      'INSERT INTO users(email,password) VALUES(?,?) ON CONFLICT(email) DO NOTHING RETURNING id',
-      [email, passwordHash],
-    );
-    const created = result.recordset[0];
-    return created ? {id: created.id, email} : null;
+    return this.database.transaction(async database => {
+      const result = await database.query(
+        'INSERT INTO users(email,password) VALUES(?,?) ON CONFLICT(email) DO NOTHING RETURNING id',
+        [email, passwordHash],
+      );
+      const created = result.recordset[0];
+      if (!created) return null;
+
+      for (const category of defaultCategories) {
+        await database.query(
+          `INSERT INTO finance_categories(user_id,name,color,is_default,updated_at)
+           VALUES(?,?,?,?,CURRENT_TIMESTAMP)
+           ON CONFLICT DO NOTHING`,
+          [created.id,category.name,category.color,1],
+        );
+      }
+
+      return {id: created.id, email};
+    });
   }
 
   async findByEmail(email) {

@@ -1,4 +1,4 @@
-import { categories, monthOnly } from '../domain/finance-values.mjs';
+import { monthOnly } from '../domain/finance-values.mjs';
 import {
   effectiveIncomeEnd,
   median,
@@ -9,12 +9,13 @@ import {
 } from './finance-service-utils.mjs';
 
 export class InsightService {
-  constructor({entries,goals,debts,incomes,budgets}) {
+  constructor({entries,goals,debts,incomes,budgets,categories}) {
     this.entries = entries;
     this.goals = goals;
     this.debts = debts;
     this.incomes = incomes;
     this.budgets = budgets;
+    this.categories = categories;
   }
 
   async get(user, month) {
@@ -22,12 +23,13 @@ export class InsightService {
     const previousMonth = shiftMonthKey(monthKey, -1);
     const {start:monthStart,end:monthEnd} = monthBounds(monthKey);
 
-    const [transactions, debts, goals, incomes, budgets] = await Promise.all([
+    const [transactions, debts, goals, incomes, budgets, categoryEntries] = await Promise.all([
       this.entries.list(user,'transactions'),
       this.debts.list(user),
       this.goals.list(user),
       this.incomes.list(user),
       this.budgets.list(user,monthKey),
+      this.categories.list(user),
     ]);
 
     const monthTransactions = transactions.filter(entry => entry.transactionDate?.slice(0, 7) === monthKey);
@@ -49,7 +51,8 @@ export class InsightService {
     const income = salary + extras;
     const balance = income - spent;
 
-    const categoryTotals = categories.map(category => ({
+    const categoryNames = categoryEntries.map(category => category.name);
+    const categoryTotals = categoryNames.map(category => ({
       category,
       total: monthTransactions
         .filter(entry => entry.category === category)
@@ -100,7 +103,7 @@ export class InsightService {
       && item.difference >= 50
     ).sort((a,b) => b.ratio - a.ratio);
 
-    const categorySpikes = categories.map(category => {
+    const categorySpikes = categoryNames.map(category => {
       const current = categoryTotals.find(item => item.category === category)?.total ?? 0;
       const historicalTotals = historicalMonthKeys.map(key =>
         transactions

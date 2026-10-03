@@ -1,7 +1,7 @@
 import type { FormEvent } from 'react'
 import { Icon } from '../../components/Icon'
 import { MetricCard } from '../../components/MetricCard'
-import { categories, type Dashboard, type RecurringExpense } from '../../domain/finance'
+import { type Dashboard, type FinanceCategory, type RecurringExpense } from '../../domain/finance'
 import { currentDateKey, money } from '../../utils/finance'
 
 type Props = {
@@ -15,6 +15,7 @@ type Props = {
   onRemove: (id: number) => void
   onMarkPaid: (id: number) => void
   onCancelEdit: () => void
+  categories: FinanceCategory[]
 }
 
 export function RecurringExpensesPage({
@@ -28,6 +29,7 @@ export function RecurringExpensesPage({
   onRemove,
   onMarkPaid,
   onCancelEdit,
+  categories,
 }: Props) {
   const pendingCount = dashboard.recurringExpenses.filter(item => !item.paid).length
 
@@ -142,8 +144,8 @@ export function RecurringExpensesPage({
             </label>
             <label>
               <span>Categoria</span>
-              <select name="category" defaultValue={editing?.category ?? categories[0]}>
-                {categories.map(category => <option key={category}>{category}</option>)}
+              <select name="category" defaultValue={editing?.category ?? categories[0]?.name ?? ''} required>
+                {categories.map(category => <option key={category.id} value={category.name}>{category.name}</option>)}
               </select>
             </label>
             <label>

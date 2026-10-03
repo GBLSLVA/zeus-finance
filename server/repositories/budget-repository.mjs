@@ -1,9 +1,11 @@
 import { HttpError } from '../http-error.mjs';
-import { categories, cents, monthOnly, normalizeBudget, text } from '../domain/finance-values.mjs';
+import { cents, monthOnly, normalizeBudget, text } from '../domain/finance-values.mjs';
+import { CategoryRepository } from './category-repository.mjs';
 
 export class BudgetRepository {
-  constructor(database) {
+  constructor(database, categories = new CategoryRepository(database)) {
     this.database = database;
+    this.categories = categories;
   }
 
   async list(user, month) {
@@ -16,8 +18,7 @@ export class BudgetRepository {
 
   async upsert(user, data) {
     const month = monthOnly(data.month);
-    const category = text(data.category);
-    if (!categories.includes(category)) throw new HttpError(400, 'Categoria inválida.');
+    const category = await this.categories.require(user,text(data.category));
     const limit = cents(data.limit);
 
     const result = await this.database.query(

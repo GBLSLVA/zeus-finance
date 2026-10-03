@@ -1,6 +1,15 @@
 export type Kind = 'transactions' | 'debts' | 'goals'
-export type View = Kind | 'incomes' | 'budgets' | 'recurring' | 'overview'
-export type Category = 'Casa' | 'Comida' | 'Transporte' | 'Lazer' | 'Outros'
+export type View = Kind | 'incomes' | 'budgets' | 'recurring' | 'categories' | 'overview'
+export type Category = string
+
+export type FinanceCategory = {
+  id: number
+  name: string
+  color: string
+  isDefault: boolean
+  createdAt: string
+  updatedAt: string
+}
 
 export type Entry = {
   id: number
@@ -147,9 +156,10 @@ export type Dashboard = {
   saved: number
   targets: number
   goalProgress: number
-  categoriesData: Array<{ category: Category; total: number; share: number }>
+  categoriesData: Array<{ category: Category; color: string; total: number; share: number }>
   budgetData: Array<{
     category: Category
+    color: string
     budget: Budget | null
     limit: number
     spent: number
@@ -163,13 +173,12 @@ export type Dashboard = {
   historyData: Array<{ monthKey: string; income: number; expenses: number; balance: number }>
 }
 
-export const categories: readonly Category[] = ['Casa', 'Comida', 'Transporte', 'Lazer', 'Outros']
-
 export const titles: Record<View, string> = {
   overview: 'Visão geral',
   incomes: 'Receitas',
   budgets: 'Orçamentos',
   recurring: 'Recorrentes',
+  categories: 'Categorias',
   transactions: 'Gastos',
   debts: 'Dívidas',
   goals: 'Metas',
@@ -180,17 +189,10 @@ export const descriptions: Record<View, string> = {
   incomes: 'Cadastre seu salário mensal e todas as rendas extras.',
   budgets: 'Defina limites mensais por categoria e acompanhe o consumo.',
   recurring: 'Cadastre compromissos mensais e acompanhe o saldo projetado.',
+  categories: 'Crie categorias próprias, escolha cores e mantenha seus gastos organizados.',
   transactions: 'Acompanhe para onde o seu dinheiro está indo.',
   debts: 'Organize os valores que ainda precisam ser pagos.',
   goals: 'Transforme objetivos em progresso visível.',
-}
-
-export const categoryColor: Record<Category, string> = {
-  Casa: '#58d6a3',
-  Comida: '#7ca8ff',
-  Transporte: '#f1c96b',
-  Lazer: '#bd91ff',
-  Outros: '#ff8f96',
 }
 
 export const emptyDashboard = (month: string): Dashboard => ({
@@ -216,14 +218,7 @@ export const emptyDashboard = (month: string): Dashboard => ({
   targets: 0,
   goalProgress: 0,
   categoriesData: [],
-  budgetData: categories.map(category => ({
-    category,
-    budget: null,
-    limit: 0,
-    spent: 0,
-    remaining: 0,
-    usage: 0,
-  })),
+  budgetData: [],
   budgetTotal: 0,
   budgetedSpent: 0,
   budgetRemaining: 0,

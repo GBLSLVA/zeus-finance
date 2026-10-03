@@ -2,7 +2,22 @@ import { HttpError } from '../http-error.mjs';
 
 const appTimeZone = process.env.APP_TIMEZONE ?? 'America/Sao_Paulo';
 
-export const categories = ['Casa','Comida','Transporte','Lazer','Outros'];
+export const defaultCategories = [
+  {name:'Casa',color:'#58d6a3'},
+  {name:'Comida',color:'#7ca8ff'},
+  {name:'Transporte',color:'#f1c96b'},
+  {name:'Lazer',color:'#bd91ff'},
+  {name:'Outros',color:'#ff8f96'},
+];
+
+export const defaultCategoryNames = defaultCategories.map(category => category.name);
+
+export const categoryColor = value => {
+  if (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value)) {
+    throw new HttpError(400,'Cor de categoria inválida.');
+  }
+  return value.toLowerCase();
+};
 
 export const text = (value, max = 120) => {
   if (typeof value !== 'string' || !value.trim() || value.length > max) {

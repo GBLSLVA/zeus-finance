@@ -14,7 +14,7 @@ Funcionalidades principais:
 - Recuperação de senha por e-mail com token de uso único, hash SHA-256 no banco, validade de 30 minutos e revogação de sessões após a redefinição.
 - Exclusão segura da conta, com confirmação por senha e remoção transacional dos dados do usuário.
 - Exportação completa dos dados da conta em backup JSON v2 isolado por usuário, incluindo movimentações de metas.
-- Restauração segura de backup JSON v2, com validação integral, reconstrução de vínculos e substituição transacional dos dados financeiros.
+- Restauração segura de backups JSON v2/v3, com validação integral, reconstrução de vínculos e substituição transacional dos dados financeiros; o formato v3 preserva categorias personalizadas e cores.
 - Exportação CSV compatível com Excel/Google Sheets, com separador regional e proteção contra fórmulas em campos de texto.
 - Cadastro, edição, listagem e exclusão de gastos, dívidas, metas e receitas.
 - Metas com histórico de aportes, retiradas, saldo inicial e correção de movimentações.
@@ -33,6 +33,7 @@ Funcionalidades principais:
 - Pagamentos parciais de dívidas com histórico, baixa automática do saldo e atualização das parcelas pagas.
 - Pagamentos e edições de dívidas protegidos por transações de banco para evitar inconsistências em operações simultâneas.
 - Distribuição de gastos por categoria.
+- Categorias personalizadas por usuário, com nome, cor, renomeação propagada e exclusão protegida quando houver registros vinculados.
 - Orçamento mensal por categoria, com limite, gasto, restante e percentual utilizado.
 - Navegação entre meses no dashboard e na área de orçamentos.
 - Histórico comparativo dos últimos 6 meses com receitas, gastos e saldo.
@@ -64,6 +65,7 @@ Funcionalidades principais:
 - **Pagamento de dívida:** reduz o saldo atual e pode contar como parcela paga; excluir um pagamento recalcula saldo e parcelas.
 - **Status da dívida:** muda automaticamente para `paid` quando o saldo chega a zero.
 - **Metas:** progresso calculado pelo valor reservado em relação ao valor alvo.
+- **Categorias:** cada usuário possui sua própria lista; renomear uma categoria atualiza gastos, recorrências e orçamentos vinculados.
 - **Orçamento mensal:** cada categoria pode ter um limite independente para cada mês.
 - **Uso do orçamento:** calculado apenas sobre categorias que possuem limite definido, evitando comparar orçamento parcial com gastos sem limite.
 - **Histórico mensal:** receitas e gastos são recalculados pela data financeira de cada lançamento e pela vigência histórica dos salários.
@@ -87,7 +89,8 @@ Migrações atuais:
 6. proteção para impedir valor reservado de meta acima do valor alvo;
 7. gastos recorrentes com vigência e vencimento mensal;
 8. histórico transacional de movimentações de metas, com migração automática do saldo reservado existente;
-9. tokens seguros e temporários para recuperação de senha.
+9. tokens seguros e temporários para recuperação de senha;
+10. categorias personalizadas por usuário, com migração automática das cinco categorias iniciais.
 
 Bases criadas por versões anteriores são atualizadas automaticamente ao iniciar o servidor.
 
@@ -200,6 +203,7 @@ Responsabilidades:
 - **GoalRepository:** metas, aportes, retiradas, histórico e concorrência transacional.
 - **DebtRepository:** dívidas, pagamentos, recálculo de saldo e concorrência transacional.
 - **IncomeRepository:** persistência e validação de receitas recorrentes e extras.
+- **CategoryRepository:** catálogo de categorias por usuário, cores, renomeação transacional e proteção de exclusão.
 - **BudgetRepository:** persistência e validação de orçamentos mensais por categoria.
 - **RecurringExpenseRepository:** recorrências, vigência, pagamentos mensais e proteção contra duplicidade.
 - **DashboardService:** consolida receitas, gastos, recorrências, dívidas, metas, orçamento e histórico mensal.
@@ -251,7 +255,6 @@ Prioridades seguintes:
 - tendências por categoria e detecção de anomalias;
 - resumo financeiro semanal e mensal;
 - ampliar o assistente conversacional com histórico de perguntas e linguagem natural mais flexível;
-- categorias personalizadas;
 - exportação PDF;
 - PWA e deploy HTTPS.
 

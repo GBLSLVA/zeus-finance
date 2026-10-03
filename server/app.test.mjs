@@ -45,6 +45,29 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.ok(first.cookie);
     assert.match(first.setCookie,/Max-Age=86400/);
 
+    const defaultCategories = await call('categories','GET',undefined,first.cookie);
+    assert.equal(defaultCategories.status,200);
+    assert.equal(defaultCategories.data.length,5);
+
+    const apiCategory = await call('categories','POST',{
+      name:'Teste API',
+      color:'#123abc',
+    },first.cookie);
+    assert.equal(apiCategory.status,201);
+    assert.equal(apiCategory.data.name,'Teste API');
+
+    const apiCategoryUpdated = await call(`categories/${apiCategory.data.id}`,'PUT',{
+      name:'Teste HTTP',
+      color:'#654321',
+    },first.cookie);
+    assert.equal(apiCategoryUpdated.status,200);
+    assert.equal(apiCategoryUpdated.data.name,'Teste HTTP');
+    assert.equal(apiCategoryUpdated.data.color,'#654321');
+
+    const apiCategoryRemoved = await call(`categories/${apiCategory.data.id}`,'DELETE',undefined,first.cookie);
+    assert.equal(apiCategoryRemoved.status,200);
+    assert.equal(apiCategoryRemoved.data.deleted,true);
+
     const firstToken = first.cookie.split('=')[1];
     const firstTokenHash = createHash('sha256').update(firstToken).digest('hex');
     const firstExpiry = (await db.query('SELECT expires FROM sessions WHERE token=?',[firstTokenHash])).recordset[0].expires;
@@ -445,7 +468,8 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     const firstExport = await call('export','GET',undefined,first.cookie);
     assert.equal(firstExport.status,200);
     assert.equal(firstExport.data.format,'zeus-finance-backup');
-    assert.equal(firstExport.data.version,2);
+    assert.equal(firstExport.data.version,3);
+    assert.equal(firstExport.data.categories.length,5);
     assert.equal(firstExport.data.account.email,'a@example.com');
     assert.match(firstExport.data.exportedAt,/^\d{4}-\d{2}-\d{2}T/);
     assert.equal(firstExport.data.transactions.length,1);
@@ -912,7 +936,115 @@ test('Conta: exclusão remove dados próprios e preserva outro usuário', async 
   }
 });
 
-test('Backup: restaura JSON v2 com vínculos e rejeita arquivo inválido sem perder dados', async () => {
+test('Categorias: personaliza, propaga renomeação e isola por usuário', async () => {
+  const dir = mkdtempSync(join(tmpdir(),'zeus-categories-'));
+  const path = join(dir,'categories.sqlite');
+  const db = new SqliteDatabase(path);
+  const repository = new FinanceRepository(db);
+  const auth = new AuthService(repository);
+
+  try {
+    const owner = await auth.login({
+      email:'categories-owner@example.com',
+      password:'secure-categories-owner-123',
+    },true,'categories-owner');
+    const other = await auth.login({
+      email:'categories-other@example.com',
+      password:'secure-categories-other-123',
+    },true,'categories-other');
+
+    const defaults = await repository.listCategories(owner.user.id);
+    assert.equal(defaults.length,5);
+    assert.ok(defaults.every(category => category.isDefault));
+    assert.ok(defaults.some(category => category.name === 'Casa' && category.color === '#58d6a3'));
+
+    const pets = await repository.addCategory(owner.user.id,{
+      name:'Pets',
+      color:'#12abef',
+    });
+    assert.equal(pets.name,'Pets');
+    assert.equal(pets.color,'#12abef');
+    assert.equal(pets.isDefault,false);
+
+    await assert.rejects(
+      repository.addCategory(owner.user.id,{name:'pets',color:'#ffffff'}),
+      error => error.status === 409,
+    );
+
+    await assert.rejects(
+      repository.add(owner.user.id,'transactions',{
+        name:'Categoria inválida',
+        category:'Não cadastrada',
+        value:10,
+        transactionDate:'2026-09-01',
+      }),
+      error => error.status === 400,
+    );
+
+    const expense = await repository.add(owner.user.id,'transactions',{
+      name:'Ração',
+      category:'Pets',
+      value:120,
+      transactionDate:'2026-09-10',
+    });
+    const budget = await repository.upsertBudget(owner.user.id,{
+      month:'2026-09',
+      category:'Pets',
+      limit:300,
+    });
+    const recurring = await repository.addRecurringExpense(owner.user.id,{
+      name:'Plano veterinário',
+      category:'Pets',
+      value:80,
+      dueDay:15,
+      activeFrom:'2026-01-01',
+      active:true,
+    });
+
+    const renamed = await repository.updateCategory(owner.user.id,pets.id,{
+      name:'Animais',
+      color:'#abcdef',
+    });
+    assert.equal(renamed.name,'Animais');
+    assert.equal(renamed.color,'#abcdef');
+
+    const expenses = await repository.list(owner.user.id,'transactions');
+    assert.equal(expenses.find(item => item.id === expense.id).category,'Animais');
+    const budgets = await repository.listBudgets(owner.user.id,'2026-09');
+    assert.equal(budgets.find(item => item.id === budget.id).category,'Animais');
+    const recurringEntries = await repository.listRecurringExpenses(owner.user.id);
+    assert.equal(recurringEntries.find(item => item.id === recurring.id).category,'Animais');
+
+    const dashboard = await repository.dashboard(owner.user.id,'2026-09');
+    const categorySummary = dashboard.categoriesData.find(item => item.category === 'Animais');
+    assert.equal(categorySummary.total,120);
+    assert.equal(categorySummary.color,'#abcdef');
+    const categoryBudget = dashboard.budgetData.find(item => item.category === 'Animais');
+    assert.equal(categoryBudget.limit,300);
+    assert.equal(categoryBudget.color,'#abcdef');
+
+    await assert.rejects(
+      repository.removeCategory(owner.user.id,pets.id),
+      error => error.status === 409,
+    );
+
+    const otherCategories = await repository.listCategories(other.user.id);
+    assert.equal(otherCategories.length,5);
+    assert.equal(otherCategories.some(category => category.name === 'Animais'),false);
+
+    await repository.remove(owner.user.id,'transactions',expense.id);
+    await repository.removeBudget(owner.user.id,budget.id);
+    await repository.removeRecurringExpense(owner.user.id,recurring.id);
+    const removed = await repository.removeCategory(owner.user.id,pets.id);
+    assert.equal(removed.deleted,true);
+    assert.equal((await repository.listCategories(owner.user.id)).some(category => category.name === 'Animais'),false);
+  } finally {
+    await db.close();
+    rmSync(dir,{recursive:true,force:true});
+  }
+});
+
+test('Backup: restaura JSON v3 com categorias e mantém compatibilidade com v2', async () => {
   const dir = mkdtempSync(join(tmpdir(),'zeus-backup-restore-'));
   const path = join(dir,'backup.sqlite');
   const db = new SqliteDatabase(path);
@@ -924,6 +1056,11 @@ test('Backup: restaura JSON v2 com vínculos e rejeita arquivo inválido sem per
       email:'backup-source@example.com',
       password:'secure-backup-source-123',
     },true,'backup-source');
+
+    const customCategory = await repository.addCategory(source.user.id,{
+      name:'Pets',
+      color:'#339966',
+    });
 
     await repository.add(source.user.id,'transactions',{
       name:'Mercado',
@@ -982,6 +1119,9 @@ test('Backup: restaura JSON v2 com vínculos e rejeita arquivo inválido sem per
     });
 
     const backup = await repository.exportUserData(source.user.id);
+    assert.equal(backup.version,3);
+    assert.equal(backup.categories.length,6);
+    assert.ok(backup.categories.some(category => category.id === customCategory.id && category.name === 'Pets' && category.color === '#339966'));
 
     const target = await auth.login({
       email:'backup-target@example.com',
@@ -997,6 +1137,7 @@ test('Backup: restaura JSON v2 com vínculos e rejeita arquivo inválido sem per
     const restored = await repository.restoreUserData(target.user.id,backup);
     assert.equal(restored.restored,true);
     assert.equal(restored.sourceEmail,'backup-source@example.com');
+    assert.equal(restored.counts.categories,6);
     assert.equal(restored.counts.transactions,2);
     assert.equal(restored.counts.goals,1);
     assert.equal(restored.counts.goalMovements,2);
@@ -1006,6 +1147,8 @@ test('Backup: restaura JSON v2 com vínculos e rejeita arquivo inválido sem per
 
     const targetBackup = await repository.exportUserData(target.user.id);
     assert.equal(targetBackup.account.email,'backup-target@example.com');
+    assert.equal(targetBackup.version,3);
+    assert.ok(targetBackup.categories.some(category => category.name === 'Pets' && category.color === '#339966'));
     assert.deepEqual(
       targetBackup.transactions.map(item => item.name).sort(),
       ['Internet','Mercado'],
@@ -1034,6 +1177,16 @@ test('Backup: restaura JSON v2 com vínculos e rejeita arquivo inválido sem per
     );
     assert.equal(afterRejectedRestore.goals[0].saved,500);
     assert.equal(afterRejectedRestore.debts[0].currentBalance,1000);
+
+    const legacyBackup = structuredClone(backup);
+    legacyBackup.version = 2;
+    delete legacyBackup.categories;
+    const legacyRestored = await repository.restoreUserData(target.user.id,legacyBackup);
+    assert.equal(legacyRestored.restored,true);
+    assert.equal(legacyRestored.counts.categories,5);
+    const legacyCategories = await repository.listCategories(target.user.id);
+    assert.equal(legacyCategories.length,5);
+    assert.equal(legacyCategories.some(category => category.name === 'Pets'),false);
   } finally {
     await db.close();
     rmSync(dir,{recursive:true,force:true});
@@ -1061,7 +1214,7 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
   const migrated = new SqliteDatabase(path);
   try {
     const versions = migrated.db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(row => row.version);
-    assert.deepEqual(versions,[1,2,3,4,5,6,7,8,9]);
+    assert.deepEqual(versions,[1,2,3,4,5,6,7,8,9,10]);
 
     const entryColumns = migrated.db.prepare('PRAGMA table_info(entries)').all().map(row => row.name);
     assert.ok(entryColumns.includes('transaction_date'));
@@ -1109,6 +1262,14 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
     assert.equal(migratedGoalMovement.type,'initial');
     assert.equal(migratedGoalMovement.amount,25000);
     assert.equal(migratedGoalMovement.movement_date,'2026-06-10');
+
+    const categoryColumns = migrated.db.prepare('PRAGMA table_info(finance_categories)').all().map(row => row.name);
+    assert.ok(categoryColumns.includes('name'));
+    assert.ok(categoryColumns.includes('color'));
+    assert.ok(categoryColumns.includes('is_default'));
+    const migratedCategories = migrated.db.prepare('SELECT name,color FROM finance_categories WHERE user_id=1 ORDER BY id').all();
+    assert.equal(migratedCategories.length,5);
+    assert.ok(migratedCategories.some(category => category.name === 'Comida' && category.color === '#7ca8ff'));
   } finally {
     await migrated.close();
     rmSync(dir,{recursive:true,force:true});
@@ -1175,7 +1336,7 @@ test('PostgreSQL: persiste cadastro e permite login após reconectar', {skip: !p
   await firstConnection.init();
   try {
     const versions = (await firstConnection.query('SELECT version FROM schema_migrations ORDER BY version')).recordset.map(row => row.version);
-    assert.deepEqual(versions,[1,2,3,4,5,6,7,8,9]);
+    assert.deepEqual(versions,[1,2,3,4,5,6,7,8,9,10]);
 
     const auth = new AuthService(new FinanceRepository(firstConnection));
     const registered = await auth.login({email,password},true,'postgres-register');

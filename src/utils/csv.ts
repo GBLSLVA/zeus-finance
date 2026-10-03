@@ -3,6 +3,7 @@ import type {
   Debt,
   DebtPayment,
   Entry,
+  FinanceCategory,
   GoalMovement,
   Income,
   RecurringExpense,
@@ -13,6 +14,7 @@ export type FinanceBackup = {
   version: number
   exportedAt: string
   account: { email: string }
+  categories: FinanceCategory[]
   transactions: Entry[]
   goals: Entry[]
   goalMovements: GoalMovement[]
