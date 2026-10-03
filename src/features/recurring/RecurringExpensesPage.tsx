@@ -15,6 +15,7 @@ type Props = {
   onRemove: (id: number) => void
   onMarkPaid: (id: number) => void
   onCancelEdit: () => void
+  categories: FinanceCategory[]
 }
 
 export function RecurringExpensesPage({
@@ -28,6 +29,7 @@ export function RecurringExpensesPage({
   onRemove,
   onMarkPaid,
   onCancelEdit,
+  categories,
 }: Props) {
   const pendingCount = dashboard.recurringExpenses.filter(item => !item.paid).length
 
