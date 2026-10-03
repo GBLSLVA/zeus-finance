@@ -1,7 +1,7 @@
 import type { FormEvent } from 'react'
 import { Icon } from '../../components/Icon'
 import { MetricCard } from '../../components/MetricCard'
-import { categoryColor, type Budget, type Category, type Dashboard } from '../../domain/finance'
+import { type Budget, type Category, type Dashboard } from '../../domain/finance'
 import { money, percent, progressPercent } from '../../utils/finance'
 
 type Props = {
@@ -44,7 +44,7 @@ export function BudgetPage({ dashboard, budgets, monthLabel, busy, onSave, onRem
           <article className={`panel budget-category-card ${item.remaining < 0 ? 'budget-category-card--over' : ''}`} key={item.category}>
             <div className="budget-category-card__header">
               <div>
-                <span className="category-dot" style={{ background: categoryColor[item.category] }} />
+                <span className="category-dot" style={{ background: item.color }} />
                 <div>
                   <strong>{item.category}</strong>
                   <span>{item.budget ? 'Limite configurado' : 'Sem limite para este mês'}</span>
