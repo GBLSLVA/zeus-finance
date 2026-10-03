@@ -186,6 +186,14 @@ O workflow em `.github/workflows/ci.yml` executa em pushes e pull requests para 
 5. `npm run build`;
 6. upload do diretório `dist/`.
 
+O workflow adicional `.github/workflows/container.yml`:
+
+1. constrói a imagem Docker;
+2. sobe um container real;
+3. valida `/api/health` e o frontend;
+4. verifica o HEALTHCHECK do container;
+5. na `main`, publica a imagem no GitHub Container Registry.
+
 ## Arquitetura atual
 
 Fluxo principal:
@@ -238,15 +246,18 @@ A evolução do ZEUS segue estes critérios:
 - App.tsx atua progressivamente como controlador de estado, carregamento e navegação, enquanto a apresentação fica nas features;
 - refatorações estruturais só entram na `main` depois de testes de API, build, smoke e PostgreSQL.
 
-## Beta gratuito na nuvem
+## Deploy em nuvem e containers
 
-O projeto já possui preparação para **Render Free + Supabase Free**.
+O ZEUS é portável entre provedores e possui preparação para **Hostnet App Cloud**, Render e outros ambientes compatíveis com Docker.
 
 - Em desenvolvimento local, continua usando SQLite.
-- Em produção, quando `DATABASE_URL` estiver definida, usa PostgreSQL.
+- Em produção, exige PostgreSQL persistente via `DATABASE_URL`.
 - `npm start` escolhe automaticamente o servidor local ou de produção com base em `NODE_ENV`.
-- O arquivo `render.yaml` contém o Blueprint do Render.
-- O passo a passo está em [CLOUD_BETA.md](./CLOUD_BETA.md).
+- O `Dockerfile` gera uma imagem Node.js 24 multi-stage e executa o processo como usuário não-root.
+- O container expõe a porta `10000` e possui healthcheck em `/api/health`.
+- O workflow `.github/workflows/container.yml` testa a imagem e publica `ghcr.io/gblslva/zeus-finance:latest` após commits na `main`.
+- A migração do Render para a Hostnet está documentada em [HOSTNET_DEPLOY.md](./HOSTNET_DEPLOY.md).
+- A configuração anterior do Render continua disponível em `render.yaml` enquanto o corte de produção não for concluído.
 
 ## Próximos passos planejados
 

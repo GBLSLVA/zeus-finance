@@ -1,0 +1,27 @@
+services:
+  zeus-finance:
+    image: ghcr.io/gblslva/zeus-finance:latest
+    restart: unless-stopped
+    ports:
+      - "10000:10000"
+    environment:
+      NODE_ENV: production
+      PORT: 10000
+      TRUST_PROXY: 1
+      APP_TIMEZONE: America/Sao_Paulo
+      APP_ORIGIN: same-origin
+      APP_BASE_URL: ${APP_BASE_URL}
+      DB_POOL_MAX: 5
+      DATABASE_URL: ${DATABASE_URL}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      PASSWORD_RESET_EMAIL_FROM: ${PASSWORD_RESET_EMAIL_FROM}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:10000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
