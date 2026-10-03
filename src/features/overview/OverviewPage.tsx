@@ -4,7 +4,6 @@ import { MetricCard } from '../../components/MetricCard'
 import { ZeusAssistantPanel } from '../assistant/ZeusAssistantPanel'
 import { ZeusInsightsPanel } from '../insights/ZeusInsightsPanel'
 import {
-  categoryColor,
   type AssistantResponse,
   type Dashboard,
   type Debt,
@@ -147,7 +146,7 @@ export function OverviewPage({
                         background: `conic-gradient(${dashboard.categoriesData.map((item, index, items) => {
                           const start = items.slice(0, index).reduce((sum, current) => sum + current.share, 0)
                           const end = start + item.share
-                          return `${categoryColor[item.category]} ${start}% ${end}%`
+                          return `${item.color} ${start}% ${end}%`
                         }).join(', ')})`,
                       }}
                       aria-label="Distribuição de gastos por categoria"
@@ -163,7 +162,7 @@ export function OverviewPage({
                         .sort((a, b) => b.total - a.total)
                         .map(item => (
                           <div className="category-row" key={item.category}>
-                            <span className="category-dot" style={{ background: categoryColor[item.category] }} />
+                            <span className="category-dot" style={{ background: item.color }} />
                             <div className="category-row__name">
                               <strong>{item.category}</strong>
                               <span>{percent(item.share)} do total</span>
@@ -213,7 +212,7 @@ export function OverviewPage({
                     <div className="budget-mini-list">
                       {dashboard.budgetData.filter(item => item.limit > 0).map(item => (
                         <div className="budget-mini-row" key={item.category}>
-                          <span className="category-dot" style={{ background: categoryColor[item.category] }} />
+                          <span className="category-dot" style={{ background: item.color }} />
                           <div>
                             <strong>{item.category}</strong>
                             <span>{money(item.spent)} de {money(item.limit)}</span>
