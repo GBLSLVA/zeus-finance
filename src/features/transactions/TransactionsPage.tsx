@@ -11,6 +11,7 @@ type Props = {
   onEdit: (entry: Entry) => void
   onRemove: (id: number) => void
   onCancelEdit: () => void
+  categories: FinanceCategory[]
 }
 
 export function TransactionsPage({
@@ -21,6 +22,7 @@ export function TransactionsPage({
   onEdit,
   onRemove,
   onCancelEdit,
+  categories,
 }: Props) {
   const editingTransaction = editing?.kind === 'transactions' ? editing.entry : null
 
