@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import { api } from './api'
 import { buildFinanceCsv, type FinanceBackup } from './utils/csv'
 import { Icon } from './components/Icon'
@@ -40,6 +40,21 @@ import {
 } from './utils/finance'
 
 type RecoveryMode = 'none' | 'request' | 'reset'
+type BackupRestoreResult = {
+  restored: boolean
+  sourceEmail: string
+  exportedAt: string
+  counts: {
+    transactions: number
+    goals: number
+    goalMovements: number
+    incomes: number
+    debts: number
+    debtPayments: number
+    budgets: number
+    recurringExpenses: number
+  }
+}
 
 function recoveryTokenFromLocation() {
   if (typeof window === 'undefined') return ''
@@ -85,6 +100,7 @@ export function App() {
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([])
   const [editingRecurring, setEditingRecurring] = useState<RecurringExpense | null>(null)
   const [exportBusy, setExportBusy] = useState(false)
+  const [restoreBusy, setRestoreBusy] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [passwordBusy, setPasswordBusy] = useState(false)
   const [passwordError, setPasswordError] = useState('')
@@ -408,6 +424,64 @@ export function App() {
       setError((e as Error).message)
     } finally {
       setExportBusy(false)
+    }
+  }
+
+  async function restoreBackupFile(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget
+    const file = input.files?.[0]
+    input.value = ''
+    if (!file) return
+
+    setError('')
+    setNotice('')
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError('O backup excede o limite de 5 MB.')
+      return
+    }
+
+    let payload: FinanceBackup
+    try {
+      payload = JSON.parse(await file.text()) as FinanceBackup
+    } catch {
+      setError('Não foi possível ler este arquivo JSON.')
+      return
+    }
+
+    if (payload?.format !== 'zeus-finance-backup' || payload?.version !== 2) {
+      setError('Backup incompatível. Selecione um backup JSON v2 gerado pelo ZEUS.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      'Restaurar este backup substituirá todos os dados financeiros atuais da sua conta. Sua senha e seu e-mail não serão alterados. Deseja continuar?',
+    )
+    if (!confirmed) return
+
+    setRestoreBusy(true)
+    try {
+      const result = await api.request<BackupRestoreResult>('import', 'POST', payload)
+      const [_, restoredBudgets] = await Promise.all([
+        load(),
+        api.request<Budget[]>(`budgets?month=${selectedMonth}`),
+      ])
+      setBudgets(restoredBudgets)
+      setSelectedDebtId(null)
+      setDebtPayments([])
+      setSelectedGoalId(null)
+      setGoalMovements([])
+      setEditing(null)
+      setEditingRecurring(null)
+      setAssistantQuestion('')
+      setAssistantAnswer(null)
+      setNotice(
+        `Backup restaurado com sucesso: ${result.counts.transactions} gastos, ${result.counts.incomes} receitas, ${result.counts.debts} dívidas e ${result.counts.goals} metas.`,
+      )
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setRestoreBusy(false)
     }
   }
 
@@ -1115,6 +1189,22 @@ export function App() {
             <Icon name="download" size={18} />
             {exportBusy ? 'Exportando…' : 'Exportar CSV'}
           </button>
+          <button
+            className="logout-button account-action-button"
+            onClick={() => document.getElementById('restore-backup-input')?.click()}
+            disabled={restoreBusy || exportBusy}
+          >
+            <Icon name="upload" size={18} />
+            {restoreBusy ? 'Restaurando…' : 'Restaurar backup'}
+          </button>
+          <input
+            id="restore-backup-input"
+            type="file"
+            accept="application/json,.json"
+            hidden
+            disabled={restoreBusy}
+            onChange={restoreBackupFile}
+          />
           <button className="logout-button account-action-button" onClick={openPasswordDialog}>
             <Icon name="shield" size={18} />
             Alterar senha
