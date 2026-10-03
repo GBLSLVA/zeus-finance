@@ -198,6 +198,10 @@ export class FinanceRepository {
     return this.exportService.export(user);
   }
 
+  async restoreUserData(user, backup) {
+    return this.exportService.restore(user,backup);
+  }
+
   async listIncomes(user) {
     return this.incomes.list(user);
   }
@@ -420,11 +424,11 @@ export class FinanceApi {
     return origin === this.origin;
   }
 
-  async body(req) {
+  async body(req, maxBytes = 16384) {
     let body = '';
     for await (const chunk of req) {
       body += chunk;
-      if (Buffer.byteLength(body) > 16384) throw new HttpError(413,'Pedido muito grande.');
+      if (Buffer.byteLength(body) > maxBytes) throw new HttpError(413,'Pedido muito grande.');
     }
     try {
       const data = JSON.parse(body);
@@ -494,6 +498,9 @@ export class FinanceApi {
       const user = await this.auth.authenticate(token);
       if (path === '/api/me' && req.method === 'GET') return send(200,await this.repository.users.findPublicById(user));
       if (path === '/api/export' && req.method === 'GET') return send(200,await this.repository.exportUserData(user));
+      if (path === '/api/import' && req.method === 'POST') {
+        return send(200,await this.repository.restoreUserData(user,await this.body(req,5 * 1024 * 1024)));
+      }
       if (path === '/api/dashboard' && req.method === 'GET') return send(200,await this.repository.dashboard(user,url.searchParams.get('month')));
       if (path === '/api/insights' && req.method === 'GET') return send(200,await this.repository.insights(user,url.searchParams.get('month')));
       if (path === '/api/assistant' && req.method === 'POST') return send(200,await this.repository.assistant(user,await this.body(req)));
