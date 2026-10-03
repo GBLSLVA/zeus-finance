@@ -45,6 +45,29 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     assert.ok(first.cookie);
     assert.match(first.setCookie,/Max-Age=86400/);
 
+    const defaultCategories = await call('categories','GET',undefined,first.cookie);
+    assert.equal(defaultCategories.status,200);
+    assert.equal(defaultCategories.data.length,5);
+
+    const apiCategory = await call('categories','POST',{
+      name:'Teste API',
+      color:'#123abc',
+    },first.cookie);
+    assert.equal(apiCategory.status,201);
+    assert.equal(apiCategory.data.name,'Teste API');
+
+    const apiCategoryUpdated = await call(`categories/${apiCategory.data.id}`,'PUT',{
+      name:'Teste HTTP',
+      color:'#654321',
+    },first.cookie);
+    assert.equal(apiCategoryUpdated.status,200);
+    assert.equal(apiCategoryUpdated.data.name,'Teste HTTP');
+    assert.equal(apiCategoryUpdated.data.color,'#654321');
+
+    const apiCategoryRemoved = await call(`categories/${apiCategory.data.id}`,'DELETE',undefined,first.cookie);
+    assert.equal(apiCategoryRemoved.status,200);
+    assert.equal(apiCategoryRemoved.data.deleted,true);
+
     const firstToken = first.cookie.split('=')[1];
     const firstTokenHash = createHash('sha256').update(firstToken).digest('hex');
     const firstExpiry = (await db.query('SELECT expires FROM sessions WHERE token=?',[firstTokenHash])).recordset[0].expires;
@@ -1021,7 +1044,7 @@ test('Categorias: personaliza, propaga renomeação e isola por usuário', async
   }
 });
 
-test('Backup: restaura JSON v2 com vínculos e rejeita arquivo inválido sem perder dados', async () => {
+test('Backup: restaura JSON v3 com categorias e mantém compatibilidade com v2', async () => {
   const dir = mkdtempSync(join(tmpdir(),'zeus-backup-restore-'));
   const path = join(dir,'backup.sqlite');
   const db = new SqliteDatabase(path);
@@ -1033,6 +1056,11 @@ test('Backup: restaura JSON v2 com vínculos e rejeita arquivo inválido sem per
       email:'backup-source@example.com',
       password:'secure-backup-source-123',
     },true,'backup-source');
+
+    const customCategory = await repository.addCategory(source.user.id,{
+      name:'Pets',
+      color:'#339966',
+    });
 
     await repository.add(source.user.id,'transactions',{
       name:'Mercado',
@@ -1091,6 +1119,9 @@ test('Backup: restaura JSON v2 com vínculos e rejeita arquivo inválido sem per
     });
 
     const backup = await repository.exportUserData(source.user.id);
+    assert.equal(backup.version,3);
+    assert.equal(backup.categories.length,6);
+    assert.ok(backup.categories.some(category => category.id === customCategory.id && category.name === 'Pets' && category.color === '#339966'));
 
     const target = await auth.login({
       email:'backup-target@example.com',
@@ -1106,6 +1137,7 @@ test('Backup: restaura JSON v2 com vínculos e rejeita arquivo inválido sem per
     const restored = await repository.restoreUserData(target.user.id,backup);
     assert.equal(restored.restored,true);
     assert.equal(restored.sourceEmail,'backup-source@example.com');
+    assert.equal(restored.counts.categories,6);
     assert.equal(restored.counts.transactions,2);
     assert.equal(restored.counts.goals,1);
     assert.equal(restored.counts.goalMovements,2);
@@ -1115,6 +1147,8 @@ test('Backup: restaura JSON v2 com vínculos e rejeita arquivo inválido sem per
 
     const targetBackup = await repository.exportUserData(target.user.id);
     assert.equal(targetBackup.account.email,'backup-target@example.com');
+    assert.equal(targetBackup.version,3);
+    assert.ok(targetBackup.categories.some(category => category.name === 'Pets' && category.color === '#339966'));
     assert.deepEqual(
       targetBackup.transactions.map(item => item.name).sort(),
       ['Internet','Mercado'],
@@ -1143,6 +1177,16 @@ test('Backup: restaura JSON v2 com vínculos e rejeita arquivo inválido sem per
     );
     assert.equal(afterRejectedRestore.goals[0].saved,500);
     assert.equal(afterRejectedRestore.debts[0].currentBalance,1000);
+
+    const legacyBackup = structuredClone(backup);
+    legacyBackup.version = 2;
+    delete legacyBackup.categories;
+    const legacyRestored = await repository.restoreUserData(target.user.id,legacyBackup);
+    assert.equal(legacyRestored.restored,true);
+    assert.equal(legacyRestored.counts.categories,5);
+    const legacyCategories = await repository.listCategories(target.user.id);
+    assert.equal(legacyCategories.length,5);
+    assert.equal(legacyCategories.some(category => category.name === 'Pets'),false);
   } finally {
     await db.close();
     rmSync(dir,{recursive:true,force:true});
