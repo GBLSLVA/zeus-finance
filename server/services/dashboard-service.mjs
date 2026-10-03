@@ -1,4 +1,4 @@
-import { categories, monthOnly } from '../domain/finance-values.mjs';
+import { monthOnly } from '../domain/finance-values.mjs';
 import {
   effectiveIncomeEnd,
   effectiveRecurringEnd,
@@ -7,24 +7,26 @@ import {
 } from './finance-service-utils.mjs';
 
 export class DashboardService {
-  constructor({entries,goals,debts,incomes,budgets,recurring}) {
+  constructor({entries,goals,debts,incomes,budgets,recurring,categories}) {
     this.entries = entries;
     this.goals = goals;
     this.debts = debts;
     this.incomes = incomes;
     this.budgets = budgets;
     this.recurring = recurring;
+    this.categories = categories;
   }
 
   async get(user, month) {
     const monthKey = monthOnly(month);
-    const [transactions, debts, goals, incomes, budgets, recurringExpenses] = await Promise.all([
+    const [transactions, debts, goals, incomes, budgets, recurringExpenses, categoryEntries] = await Promise.all([
       this.entries.list(user,'transactions'),
       this.debts.list(user),
       this.goals.list(user),
       this.incomes.list(user),
       this.budgets.list(user,monthKey),
       this.recurring.list(user),
+      this.categories.list(user),
     ]);
 
     const calculateMonth = key => {
@@ -87,25 +89,27 @@ export class DashboardService {
     const saved = goals.reduce((total, entry) => total + entry.saved, 0);
     const targets = goals.reduce((total, entry) => total + entry.target, 0);
 
-    const categoriesData = categories.map(category => {
+    const categoriesData = categoryEntries.map(categoryEntry => {
       const total = current.monthly
-        .filter(entry => entry.category === category)
+        .filter(entry => entry.category === categoryEntry.name)
         .reduce((sum, entry) => sum + entry.value, 0);
       return {
-        category,
+        category:categoryEntry.name,
+        color:categoryEntry.color,
         total,
         share:current.spent > 0 ? (total / current.spent) * 100 : 0,
       };
     }).filter(item => item.total > 0);
 
-    const budgetData = categories.map(category => {
-      const budget = budgets.find(item => item.category === category) ?? null;
+    const budgetData = categoryEntries.map(categoryEntry => {
+      const budget = budgets.find(item => item.category === categoryEntry.name) ?? null;
       const categorySpent = current.monthly
-        .filter(entry => entry.category === category)
+        .filter(entry => entry.category === categoryEntry.name)
         .reduce((sum, entry) => sum + entry.value, 0);
       const limit = budget?.limit ?? 0;
       return {
-        category,
+        category:categoryEntry.name,
+        color:categoryEntry.color,
         budget,
         limit,
         spent:categorySpent,
