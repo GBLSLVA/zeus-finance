@@ -14,9 +14,9 @@ type Props = {
 
 const defaultSuggestions = [
   'Quanto gastei este mês?',
-  'Qual foi minha maior categoria de gastos?',
-  'Quanto ainda tenho de saldo?',
-  'Me dê um resumo do mês.',
+  'Qual meu saldo?',
+  'Maior categoria de gastos',
+  'Resumo do mês',
 ]
 
 export function ZeusAssistantPanel({
@@ -34,8 +34,11 @@ export function ZeusAssistantPanel({
     <section className="panel assistant-panel" aria-labelledby="zeus-assistant-title">
       <div className="panel__header assistant-panel__header">
         <div>
-          <h2 id="zeus-assistant-title">Converse com seus dados</h2>
-          <p>Faça perguntas sobre {monthLabel.toLowerCase()} usando apenas os dados registrados na sua conta. Recurso em testes.</p>
+          <div className="assistant-title-row">
+            <h2 id="zeus-assistant-title">Pergunte ao ZEUS</h2>
+            <span className="assistant-beta">BETA</span>
+          </div>
+          <p>Respostas baseadas nos seus dados de {monthLabel.toLowerCase()}.</p>
         </div>
       </div>
 
@@ -47,20 +50,27 @@ export function ZeusAssistantPanel({
       )}
 
       <form className="assistant-form" onSubmit={onSubmit}>
-        <input
-          value={question}
-          onChange={event => onQuestionChange(event.target.value)}
-          placeholder="Ex.: Quanto ainda tenho de saldo?"
-          maxLength={300}
-          aria-label="Pergunta para o ZEUS"
-        />
-        <button className="primary" type="submit" disabled={busy || !question.trim()}>
-          {busy ? 'Analisando…' : 'Perguntar'}
-          {!busy && <Icon name="arrow" size={17} />}
-        </button>
+        <div className="assistant-composer">
+          <input
+            value={question}
+            onChange={event => onQuestionChange(event.target.value)}
+            placeholder="Pergunte algo sobre suas finanças..."
+            maxLength={300}
+            aria-label="Pergunta para o ZEUS"
+          />
+          <button
+            className="assistant-send"
+            type="submit"
+            disabled={busy || !question.trim()}
+            aria-label={busy ? 'ZEUS analisando pergunta' : 'Enviar pergunta ao ZEUS'}
+          >
+            {busy ? <span aria-hidden="true">•••</span> : <Icon name="arrow" size={18} />}
+          </button>
+        </div>
       </form>
 
       <div className="assistant-suggestions" aria-label="Sugestões de perguntas">
+        <span className="assistant-suggestions__label">Sugestões</span>
         {suggestions.map(suggestion => (
           <button
             type="button"
