@@ -49,12 +49,6 @@ jobs:
       - name: Verify healthcheck and frontend
         shell: bash
         run: |
-          cleanup() {
-            docker logs zeus-finance-ci || true
-            docker rm -f zeus-finance-ci >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
-
           for attempt in {1..30}; do
             if curl -fsS http://127.0.0.1:10000/api/health > /tmp/health.json; then
               break
@@ -83,6 +77,13 @@ jobs:
           done
           docker inspect zeus-finance-ci
           exit 1
+
+      - name: Show logs and remove test container
+        if: always()
+        shell: bash
+        run: |
+          docker logs zeus-finance-ci || true
+          docker rm -f zeus-finance-ci >/dev/null 2>&1 || true
 
   publish:
     name: Publish GHCR image
