@@ -26,7 +26,7 @@ export class UserRepository {
         await database.query(
           `INSERT INTO finance_categories(user_id,name,color,is_default,updated_at)
            VALUES(?,?,?,?,CURRENT_TIMESTAMP)
-           ON CONFLICT(user_id,name) DO NOTHING`,
+           ON CONFLICT DO NOTHING`,
           [created.id,category.name,category.color,1],
         );
       }
