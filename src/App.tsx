@@ -3,6 +3,7 @@ import { api } from './api'
 import { buildFinanceCsv, type FinanceBackup } from './utils/csv'
 import { Icon } from './components/Icon'
 import { RecurringExpensesPage } from './features/recurring/RecurringExpensesPage'
+import { CategoriesPage } from './features/categories/CategoriesPage'
 import { BudgetPage } from './features/budgets/BudgetPage'
 import { DebtPage } from './features/debts/DebtPage'
 import { GoalsPage } from './features/goals/GoalsPage'
@@ -20,6 +21,7 @@ import {
   type DebtPayment,
   type EditState,
   type Entry,
+  type FinanceCategory,
   type GoalMovement,
   type Income,
   type Insight,
@@ -98,6 +100,7 @@ export function App() {
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey())
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([])
+  const [categories, setCategories] = useState<FinanceCategory[]>([])
   const [editingRecurring, setEditingRecurring] = useState<RecurringExpense | null>(null)
   const [exportBusy, setExportBusy] = useState(false)
   const [restoreBusy, setRestoreBusy] = useState(false)
@@ -116,16 +119,18 @@ export function App() {
   const [dashboard, setDashboard] = useState<Dashboard>(() => emptyDashboard(currentMonthKey()))
 
   const load = async () => {
-    const [transactions, debts, goals, incomeEntries, recurringEntries] = await Promise.all([
+    const [transactions, debts, goals, incomeEntries, recurringEntries, categoryEntries] = await Promise.all([
       api.request<Entry[]>('transactions'),
       api.request<Debt[]>('debts'),
       api.request<Entry[]>('goals'),
       api.request<Income[]>('incomes'),
       api.request<RecurringExpense[]>('recurring-expenses'),
+      api.request<FinanceCategory[]>('categories'),
     ])
     setData({ transactions, debts, goals })
     setIncomes(incomeEntries)
     setRecurringExpenses(recurringEntries)
+    setCategories(categoryEntries)
   }
 
   useEffect(() => {
@@ -179,7 +184,7 @@ export function App() {
     return () => {
       active = false
     }
-  }, [user, selectedMonth, data, incomes, budgets])
+  }, [user, selectedMonth, data, incomes, budgets, categories])
 
   useEffect(() => {
     if (!user) {
@@ -203,7 +208,7 @@ export function App() {
     return () => {
       active = false
     }
-  }, [user, selectedMonth, data, incomes, budgets, recurringExpenses])
+  }, [user, selectedMonth, data, incomes, budgets, recurringExpenses, categories])
 
   useEffect(() => {
     setAssistantAnswer(null)
@@ -223,6 +228,7 @@ export function App() {
       setGoalMovements([])
       setBudgets([])
       setRecurringExpenses([])
+      setCategories([])
       setEditingRecurring(null)
       setInsights([])
       setMonthlySummary(null)
@@ -344,6 +350,7 @@ export function App() {
       setGoalMovements([])
       setBudgets([])
       setRecurringExpenses([])
+      setCategories([])
       setEditingRecurring(null)
       setInsights([])
       setMonthlySummary(null)
@@ -565,6 +572,7 @@ export function App() {
       setGoalMovements([])
       setBudgets([])
       setRecurringExpenses([])
+      setCategories([])
       setEditingRecurring(null)
       setInsights([])
       setMonthlySummary(null)
@@ -701,6 +709,61 @@ export function App() {
   function cancelEdit() {
     setEditing(null)
     setError('')
+  }
+
+  async function saveCategory(event: FormEvent<HTMLFormElement>, category?: FinanceCategory) {
+    event.preventDefault()
+    const element = event.currentTarget
+    const form = new FormData(element)
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const payload = {
+        name: String(form.get('name') ?? ''),
+        color: String(form.get('color') ?? '#7ca8ff'),
+      }
+      const saved = await api.request<FinanceCategory>(
+        category ? `categories/${category.id}` : 'categories',
+        category ? 'PUT' : 'POST',
+        payload,
+      )
+      setCategories(current =>
+        category
+          ? current.map(item => item.id === saved.id ? saved : item)
+          : [...current, saved],
+      )
+      if (category && category.name !== saved.name) {
+        const [_, refreshedBudgets] = await Promise.all([
+          load(),
+          api.request<Budget[]>(`budgets?month=${selectedMonth}`),
+        ])
+        setBudgets(refreshedBudgets)
+      }
+      if (!category) element.reset()
+      setNotice(category ? 'Categoria atualizada com sucesso.' : 'Categoria criada com sucesso.')
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeCategory(id: number) {
+    const category = categories.find(item => item.id === id)
+    if (!category || !window.confirm(`Excluir a categoria "${category.name}"?`)) return
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      await api.request(`categories/${id}`, 'DELETE')
+      setCategories(current => current.filter(item => item.id !== id))
+      setNotice('Categoria excluída.')
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function saveBudget(event: FormEvent<HTMLFormElement>, category: Category) {
@@ -1127,11 +1190,12 @@ export function App() {
     )
   }
 
-  const navItems: Array<{ key: View; label: string; icon: 'overview' | 'income' | 'budget' | 'wallet' | 'debt' | 'goal' | 'calendar' }> = [
+  const navItems: Array<{ key: View; label: string; icon: 'overview' | 'income' | 'budget' | 'wallet' | 'debt' | 'goal' | 'calendar' | 'tag' }> = [
     { key: 'overview', label: 'Visão geral', icon: 'overview' },
     { key: 'incomes', label: 'Receitas', icon: 'income' },
     { key: 'budgets', label: 'Orçamentos', icon: 'budget' },
     { key: 'recurring', label: 'Recorrentes', icon: 'calendar' },
+    { key: 'categories', label: 'Categorias', icon: 'tag' },
     { key: 'transactions', label: 'Gastos', icon: 'wallet' },
     { key: 'debts', label: 'Dívidas', icon: 'debt' },
     { key: 'goals', label: 'Metas', icon: 'goal' },
@@ -1166,7 +1230,7 @@ export function App() {
               <span>{item.label}</span>
               {item.key !== 'overview' && (
                 <span className="nav-count">
-                  {item.key === 'incomes' ? incomes.length : item.key === 'budgets' ? budgets.length : item.key === 'recurring' ? recurringExpenses.length : item.key === 'transactions' ? data.transactions.length : item.key === 'debts' ? data.debts.length : data.goals.length}
+                  {item.key === 'incomes' ? incomes.length : item.key === 'budgets' ? budgets.length : item.key === 'recurring' ? recurringExpenses.length : item.key === 'categories' ? categories.length : item.key === 'transactions' ? data.transactions.length : item.key === 'debts' ? data.debts.length : data.goals.length}
                 </span>
               )}
             </button>
@@ -1299,6 +1363,15 @@ export function App() {
               setEditingRecurring(null)
               setError('')
             }}
+            categories={categories}
+          />
+        ) : view === 'categories' ? (
+          <CategoriesPage
+            categories={categories}
+            busy={busy}
+            onAdd={event => { void saveCategory(event) }}
+            onUpdate={(event, category) => { void saveCategory(event, category) }}
+            onRemove={id => { void removeCategory(id) }}
           />
         ) : view === 'budgets' ? (
           <BudgetPage
@@ -1429,6 +1502,7 @@ export function App() {
             onEdit={entry => startEdit('transactions', entry)}
             onRemove={id => { void remove('transactions', id) }}
             onCancelEdit={cancelEdit}
+            categories={categories}
           />
         )}
       </main>
