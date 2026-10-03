@@ -445,7 +445,8 @@ test('API: autenticação, CRUD, datas financeiras, recorrência e isolamento', 
     const firstExport = await call('export','GET',undefined,first.cookie);
     assert.equal(firstExport.status,200);
     assert.equal(firstExport.data.format,'zeus-finance-backup');
-    assert.equal(firstExport.data.version,2);
+    assert.equal(firstExport.data.version,3);
+    assert.equal(firstExport.data.categories.length,5);
     assert.equal(firstExport.data.account.email,'a@example.com');
     assert.match(firstExport.data.exportedAt,/^\d{4}-\d{2}-\d{2}T/);
     assert.equal(firstExport.data.transactions.length,1);
@@ -1061,7 +1062,7 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
   const migrated = new SqliteDatabase(path);
   try {
     const versions = migrated.db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(row => row.version);
-    assert.deepEqual(versions,[1,2,3,4,5,6,7,8,9]);
+    assert.deepEqual(versions,[1,2,3,4,5,6,7,8,9,10]);
 
     const entryColumns = migrated.db.prepare('PRAGMA table_info(entries)').all().map(row => row.name);
     assert.ok(entryColumns.includes('transaction_date'));
@@ -1109,6 +1110,14 @@ test('Banco: migra uma base antiga sem perder registros', async () => {
     assert.equal(migratedGoalMovement.type,'initial');
     assert.equal(migratedGoalMovement.amount,25000);
     assert.equal(migratedGoalMovement.movement_date,'2026-06-10');
+
+    const categoryColumns = migrated.db.prepare('PRAGMA table_info(finance_categories)').all().map(row => row.name);
+    assert.ok(categoryColumns.includes('name'));
+    assert.ok(categoryColumns.includes('color'));
+    assert.ok(categoryColumns.includes('is_default'));
+    const migratedCategories = migrated.db.prepare('SELECT name,color FROM finance_categories WHERE user_id=1 ORDER BY id').all();
+    assert.equal(migratedCategories.length,5);
+    assert.ok(migratedCategories.some(category => category.name === 'Comida' && category.color === '#7ca8ff'));
   } finally {
     await migrated.close();
     rmSync(dir,{recursive:true,force:true});
@@ -1175,7 +1184,7 @@ test('PostgreSQL: persiste cadastro e permite login após reconectar', {skip: !p
   await firstConnection.init();
   try {
     const versions = (await firstConnection.query('SELECT version FROM schema_migrations ORDER BY version')).recordset.map(row => row.version);
-    assert.deepEqual(versions,[1,2,3,4,5,6,7,8,9]);
+    assert.deepEqual(versions,[1,2,3,4,5,6,7,8,9,10]);
 
     const auth = new AuthService(new FinanceRepository(firstConnection));
     const registered = await auth.login({email,password},true,'postgres-register');
