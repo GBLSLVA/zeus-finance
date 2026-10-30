@@ -3623,3 +3623,93 @@ tbody tr:hover td {
     flex: 1;
   }
 }
+
+
+/* Progressive enhancements inspired by abn.ooo/projects:
+ * component-aware layout, keyboard navigation and restrained motion.
+ */
+.skip-link {
+  position: fixed;
+  z-index: 1000;
+  top: 12px;
+  left: 12px;
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 10px 15px;
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  transform: translateY(calc(-100% - 24px));
+  transition: transform 140ms ease;
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+.workspace:focus {
+  outline: none;
+}
+
+/* The dashboard responds to actual available width (including the sidebar)
+ * instead of relying entirely on viewport width.
+ */
+.dashboard {
+  container-name: zeus-dashboard;
+  container-type: inline-size;
+}
+
+@container zeus-dashboard (max-width: 800px) {
+  .dashboard-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-hero__aside {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-top: 1px solid #263331;
+    border-left: 0;
+  }
+
+  .dashboard-hero__aside > div + div {
+    border-top: 0;
+    border-left: 1px solid #263331;
+  }
+
+  .metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .spending-panel {
+    grid-row: auto;
+  }
+}
+
+@container zeus-dashboard (max-width: 480px) {
+  .metrics-grid,
+  .dashboard-hero__aside {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-hero__aside > div + div {
+    border-top: 1px solid #263331;
+    border-left: 0;
+  }
+
+  .metric-card > strong {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skip-link {
+    transition: none;
+  }
+}
