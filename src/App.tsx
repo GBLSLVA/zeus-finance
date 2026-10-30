@@ -2,6 +2,10 @@ import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import { api } from './api'
 import { buildFinanceCsv, type FinanceBackup } from './utils/csv'
 import { Icon } from './components/Icon'
+import { NavigationSidebar } from './features/navigation/NavigationSidebar'
+import { MobileNavigation } from './features/navigation/MobileNavigation'
+import { PageToolbar } from './features/navigation/PageToolbar'
+import { IncomePage } from './features/incomes/IncomePage'
 import { useStaggeredReveal } from './hooks/useStaggeredReveal'
 import { RecurringExpensesPage } from './features/recurring/RecurringExpensesPage'
 import { CategoriesPage } from './features/categories/CategoriesPage'
@@ -11,7 +15,6 @@ import { GoalsPage } from './features/goals/GoalsPage'
 import { OverviewPage } from './features/overview/OverviewPage'
 import { TransactionsPage } from './features/transactions/TransactionsPage'
 import {
-  descriptions,
   emptyDashboard,
   titles,
   type AssistantResponse,
@@ -36,10 +39,8 @@ import {
 import {
   currentDateKey,
   currentMonthKey,
-  effectiveIncomeEnd,
   formatMonth,
   money,
-  shiftMonthKey,
 } from './utils/finance'
 
 type RecoveryMode = 'none' | 'request' | 'reset'
@@ -1211,163 +1212,52 @@ export function App() {
     )
   }
 
-  const navItems: Array<{ key: View; label: string; icon: 'overview' | 'income' | 'budget' | 'wallet' | 'debt' | 'goal' | 'calendar' | 'tag' }> = [
-    { key: 'overview', label: 'Visão geral', icon: 'overview' },
-    { key: 'incomes', label: 'Receitas', icon: 'income' },
-    { key: 'budgets', label: 'Orçamentos', icon: 'budget' },
-    { key: 'recurring', label: 'Recorrentes', icon: 'calendar' },
-    { key: 'categories', label: 'Categorias', icon: 'tag' },
-    { key: 'transactions', label: 'Gastos', icon: 'wallet' },
-    { key: 'debts', label: 'Dívidas', icon: 'debt' },
-    { key: 'goals', label: 'Metas', icon: 'goal' },
-  ]
+  const navigationCounts: Record<View, number> = {
+    overview: 0,
+    incomes: incomes.length,
+    transactions: data.transactions.length,
+    budgets: budgets.length,
+    recurring: recurringExpenses.length,
+    debts: data.debts.length,
+    goals: data.goals.length,
+    categories: categories.length,
+  }
+
 
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Pular para o conteúdo</a>
       {menu && <button className="nav-backdrop" aria-label="Fechar menu" onClick={() => setMenu(false)} />}
 
-      <aside id="navigation" className={`sidebar ${menu ? 'open' : ''}`}>
-        <div className="sidebar__brand">
-          <span className="brand-mark">Z</span>
-          <div>
-            <strong>ZEUS</strong>
-            <span>FINANCE</span>
-          </div>
-          <button className="sidebar-close" onClick={() => setMenu(false)} aria-label="Fechar menu">
-            <Icon name="close" size={20} />
-          </button>
-        </div>
-
-        <div className="sidebar__section-label">PAINEL</div>
-        <nav aria-label="Navegação principal">
-          {navItems.map(item => (
-            <button
-              key={item.key}
-              className={`nav-item ${view === item.key ? 'active' : ''}`}
-              aria-current={view === item.key ? 'page' : undefined}
-              onClick={() => navigate(item.key)}
-            >
-              <Icon name={item.icon} size={19} />
-              <span>{item.label}</span>
-              {item.key !== 'overview' && (
-                <span className="nav-count">
-                  {item.key === 'incomes' ? incomes.length : item.key === 'budgets' ? budgets.length : item.key === 'recurring' ? recurringExpenses.length : item.key === 'categories' ? categories.length : item.key === 'transactions' ? data.transactions.length : item.key === 'debts' ? data.debts.length : data.goals.length}
-                </span>
-              )}
-            </button>
-          ))}
-        </nav>
-
-        <div className="sidebar__bottom">
-          <details className="account-menu">
-            <summary className="account-card account-card--interactive">
-              <span className="account-avatar">{user.email.slice(0, 1).toUpperCase()}</span>
-              <div className="account-card__identity">
-                <strong>{user.email}</strong>
-                <span className="account-card__status"><i aria-hidden="true" />Conta ativa</span>
-              </div>
-              <span className="account-menu__chevron" aria-hidden="true">›</span>
-            </summary>
-
-            <div className="account-menu__panel">
-              <div className="account-menu__header">
-                <span>Minha conta</span>
-                <strong>{user.email}</strong>
-              </div>
-
-              <div className="account-menu__group">
-                <span className="account-menu__label">Dados</span>
-                <button className="account-menu__action" onClick={exportAccountData} disabled={exportBusy}>
-                  <Icon name="download" size={17} />
-                  {exportBusy ? 'Exportando…' : 'Fazer backup'}
-                </button>
-                <button className="account-menu__action" onClick={exportAccountCsv} disabled={exportBusy}>
-                  <Icon name="download" size={17} />
-                  {exportBusy ? 'Exportando…' : 'Exportar CSV'}
-                </button>
-                <button
-                  className="account-menu__action"
-                  onClick={() => document.getElementById('restore-backup-input')?.click()}
-                  disabled={restoreBusy || exportBusy}
-                >
-                  <Icon name="upload" size={17} />
-                  {restoreBusy ? 'Restaurando…' : 'Restaurar backup'}
-                </button>
-                <input
-                  id="restore-backup-input"
-                  type="file"
-                  accept="application/json,.json"
-                  hidden
-                  disabled={restoreBusy}
-                  onChange={restoreBackupFile}
-                />
-              </div>
-
-              <div className="account-menu__group">
-                <span className="account-menu__label">Segurança</span>
-                <button className="account-menu__action" onClick={openPasswordDialog}>
-                  <Icon name="shield" size={17} />
-                  Alterar senha
-                </button>
-              </div>
-
-              <div className="account-menu__group account-menu__group--danger">
-                <span className="account-menu__label">Zona de perigo</span>
-                <button className="account-menu__action account-menu__action--danger" onClick={openDeleteAccountDialog}>
-                  <Icon name="trash" size={17} />
-                  Excluir conta
-                </button>
-              </div>
-            </div>
-          </details>
-
-          <button className="logout-button sidebar-logout" onClick={logout}>
-            <Icon name="logout" size={18} />
-            Sair da conta
-          </button>
-        </div>
-      </aside>
+      <NavigationSidebar
+        isOpen={menu}
+        onClose={() => setMenu(false)}
+        activeView={view}
+        navigate={navigate}
+        email={user.email}
+        counts={navigationCounts}
+        actions={{
+          exportBusy,
+          restoreBusy,
+          exportBackup: exportAccountData,
+          exportCsv: exportAccountCsv,
+          onRestoreFile: restoreBackupFile,
+          onChangePassword: openPasswordDialog,
+          onDeleteAccount: openDeleteAccountDialog,
+          onLogout: logout,
+        }}
+      />
 
       <main id="main-content" ref={workspaceRef} className="workspace" tabIndex={-1}>
-        <header className="page-header">
-          <div className="page-header__left">
-            <button
-              className="menu-button"
-              aria-controls="navigation"
-              aria-expanded={menu}
-              onClick={() => setMenu(true)}
-              aria-label="Abrir menu"
-            >
-              <Icon name="menu" size={21} />
-            </button>
-            <div>
-              {view === 'overview' && <span className="section-kicker">{monthLabel}</span>}
-              <h1>{titles[view]}</h1>
-              <p>{descriptions[view]}</p>
-            </div>
-          </div>
-          {view === 'overview' && (
-            <button className="primary page-header__action" onClick={() => navigate('incomes')}>
-              <Icon name="plus" size={18} />
-              Nova receita
-            </button>
-          )}
-        </header>
-
-        {(view === 'overview' || view === 'budgets' || view === 'recurring') && (
-          <div className="period-toolbar" aria-label="Selecionar período">
-            <button className="period-button" onClick={() => setSelectedMonth(current => shiftMonthKey(current, -1))} aria-label="Mês anterior">‹</button>
-            <div className="period-toolbar__current">
-              <Icon name="calendar" size={16} />
-              <strong>{monthLabel}</strong>
-            </div>
-            <button className="period-button" onClick={() => setSelectedMonth(current => shiftMonthKey(current, 1))} aria-label="Próximo mês">›</button>
-            {selectedMonth !== currentMonthKey() && (
-              <button className="period-today" onClick={() => setSelectedMonth(currentMonthKey())}>Mês atual</button>
-            )}
-          </div>
-        )}
+        <PageToolbar
+          view={view}
+          monthLabel={monthLabel}
+          selectedMonth={selectedMonth}
+          onMonthChange={setSelectedMonth}
+          onNavigate={navigate}
+          onOpenMenu={() => setMenu(true)}
+          menuOpen={menu}
+        />
 
         {notice && <p role="status" className="alert alert--success">{notice}</p>}
         {error && <p role="alert" className="alert alert--error">{error}</p>}
@@ -1468,76 +1358,16 @@ export function App() {
             onRemoveMovement={id => { void removeGoalMovement(id) }}
           />
         ) : view === 'incomes' ? (
-          <div className="records-layout">
-            <section className="panel records-panel">
-              <div className="panel__header records-panel__header">
-                <div>
-                  <h2>Receitas cadastradas</h2>
-                </div>
-                <span className="records-count">{incomes.length} {incomes.length === 1 ? 'item' : 'itens'}</span>
-              </div>
-
-              <div className="income-summary-strip">
-                <div><span>Salário mensal</span><strong>{money(dashboard.salary)}</strong></div>
-                <div><span>Extras deste mês</span><strong>{money(dashboard.extras)}</strong></div>
-                <div><span>Total mensal</span><strong>{money(dashboard.income)}</strong></div>
-              </div>
-
-              <div className="table-wrap">
-                <table>
-                  <thead><tr><th>Descrição</th><th>Tipo / referência</th><th>Valor</th><th className="table-action">Ação</th></tr></thead>
-                  <tbody>
-                    {incomes.map(entry => (
-                      <tr key={entry.id}>
-                        <td>
-                          <div className="record-name">
-                            <span className="record-icon record-icon--incomes"><Icon name="income" size={17} /></span>
-                            <div><strong>{entry.name}</strong><span>{entry.type === 'salary' ? `Mensal • ${entry.active ? 'ativa' : 'inativa'}` : 'Receita extraordinária'}</span></div>
-                          </div>
-                        </td>
-                        <td>
-                          <span className={`income-type income-type--${entry.type}`}>{entry.type === 'salary' ? 'Salário' : 'Extra'}</span>
-                          <small className="income-date">
-                            {entry.type === 'salary'
-                              ? `${new Date(entry.activeFrom + 'T12:00:00').toLocaleDateString('pt-BR')} → ${effectiveIncomeEnd(entry) ? new Date(effectiveIncomeEnd(entry)! + 'T12:00:00').toLocaleDateString('pt-BR') : 'atual'}`
-                              : new Date(entry.receivedAt.replace(' ', 'T') + 'Z').toLocaleDateString('pt-BR')}
-                          </small>
-                        </td>
-                        <td><strong className="table-value">{money(entry.value)}</strong></td>
-                        <td className="table-action">
-                          <div className="table-actions">
-                            <button className="icon-action" disabled={busy} onClick={() => startEdit('incomes', entry)} aria-label={`Editar ${entry.name}`}><Icon name="edit" size={17} /></button>
-                            <button className="icon-action icon-action--danger" disabled={busy} onClick={() => remove('incomes', entry.id)} aria-label={`Excluir ${entry.name}`}><Icon name="trash" size={17} /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {!incomes.length && (
-                      <tr><td colSpan={4} className="table-empty"><div className="empty-block__icon"><Icon name="income" size={22} /></div><strong>Nenhuma receita cadastrada.</strong><span>Cadastre primeiro seu salário mensal e depois as receitas extras.</span></td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <aside className="panel record-form-panel">
-              <h2>{editing?.kind === 'incomes' ? 'Atualizar entrada' : 'Adicionar entrada'}</h2>
-              <p>Salários são recorrentes durante o período de vigência. Receitas extras entram somente no mês informado.</p>
-              <form key={`incomes-${editing?.kind === 'incomes' ? editing.entry.id : 'new'}`} onSubmit={save}>
-                <label><span>Descrição</span><input name="name" defaultValue={editing?.kind === 'incomes' ? editing.entry.name : ''} placeholder="Ex.: Salário empresa / Freelance" required maxLength={120} /></label>
-                <label><span>Tipo de receita</span><select name="type" defaultValue={editing?.kind === 'incomes' ? editing.entry.type : 'salary'}><option value="salary">Salário mensal</option><option value="extra">Renda extra</option></select></label>
-                <label><span>Valor</span><div className="money-input"><span>R$</span><input name="value" type="number" min="0.01" max="100000000" step="0.01" defaultValue={editing?.kind === 'incomes' ? editing.entry.value : undefined} placeholder="0,00" required /></div></label>
-                <label><span>Data de referência / início</span><input name="date" type="date" defaultValue={editing?.kind === 'incomes' ? (editing.entry.type === 'salary' ? editing.entry.activeFrom : editing.entry.receivedAt.slice(0, 10)) : currentDateKey()} required /></label>
-                <label><span>Vigente até (opcional para salário)</span><input name="activeUntil" type="date" defaultValue={editing?.kind === 'incomes' ? editing.entry.activeUntil ?? '' : ''} /></label>
-                <label className="check-field"><input name="active" type="checkbox" defaultChecked={editing?.kind === 'incomes' ? editing.entry.active : true} /><span>Receita ativa</span></label>
-                <div className="form-actions">
-                  <button className="primary primary--full" disabled={busy}>{busy ? 'Salvando…' : editing?.kind === 'incomes' ? 'Atualizar receita' : 'Salvar receita'}{!busy && <Icon name="arrow" size={17} />}</button>
-                  {editing?.kind === 'incomes' && <button type="button" className="secondary-button" onClick={cancelEdit}>Cancelar edição</button>}
-                </div>
-              </form>
-              <div className="form-security"><Icon name="shield" size={17} /><span>O registro será salvo apenas na sua conta.</span></div>
-            </aside>
-          </div>
+          <IncomePage
+            incomes={incomes}
+            dashboard={dashboard}
+            editing={editing}
+            busy={busy}
+            onSave={save}
+            onEdit={entry => startEdit('incomes', entry)}
+            onRemove={id => { void remove('incomes', id) }}
+            onCancelEdit={cancelEdit}
+          />
         ) : (
           <TransactionsPage
             entries={data.transactions}
@@ -1551,6 +1381,13 @@ export function App() {
           />
         )}
       </main>
+
+      <MobileNavigation
+        activeView={view}
+        navigate={navigate}
+        onMore={() => setMenu(true)}
+        menuOpen={menu}
+      />
 
       {passwordOpen && (
         <div className="security-modal-backdrop" role="presentation" onMouseDown={event => {
