@@ -452,13 +452,17 @@
     position: static;
   }
 
+  .record-form-panel form,
+  .record-form-panel > p {
+    max-width: 660px;
+  }
+
   .recurring-item__details {
     grid-template-columns: minmax(0, 1fr) minmax(0, .65fr) minmax(0, 1.2fr);
   }
 }
 
 @media (max-width: 980px) {
-  .workspace { padding: var(--space-6) var(--space-5) calc(110px + env(safe-area-inset-bottom)); }
   .budget-summary-grid,
   .debt-summary-grid,
   .recurring-page .budget-summary-grid {
@@ -469,6 +473,12 @@
   .debt-summary-grid > :last-child,
   .recurring-page .budget-summary-grid > :last-child {
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 940px) {
+  .workspace {
+    padding: var(--space-6) var(--space-5) calc(110px + env(safe-area-inset-bottom));
   }
 }
 
