@@ -1,4 +1,4 @@
-import type { ChangeEvent } from 'react'
+import { useEffect, useRef, type ChangeEvent } from 'react'
 import { Icon } from '../../components/Icon'
 import { navigationItems } from './navigation'
 import type { View } from '../../domain/finance'
@@ -28,8 +28,48 @@ interface SidebarProps {
 export function NavigationSidebar({
   isOpen, onClose, activeView, navigate, email, counts, actions,
 }: SidebarProps) {
+  const sidebarRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const panel = sidebarRef.current
+    if (!panel) return
+    const trigger = document.activeElement instanceof HTMLElement
+      ? document.activeElement : null
+    panel.querySelector<HTMLButtonElement>('.sidebar-close')?.focus()
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return
+      const elements = Array.from(panel.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), summary, select, textarea',
+      )).filter(element => element.getClientRects().length > 0)
+      if (!elements.length) return
+      const first = elements[0]
+      const last = elements[elements.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      trigger?.focus()
+    }
+  }, [isOpen])
+
   return (
-      <aside id="navigation" className={`sidebar ${isOpen ? 'open' : ''}`}>
+      <aside
+        ref={sidebarRef}
+        id="navigation"
+        role={isOpen ? 'dialog' : undefined}
+        aria-label={isOpen ? 'Menu de navegação e conta' : undefined}
+        aria-modal={isOpen ? true : undefined}
+        className={`sidebar ${isOpen ? 'open' : ''}`}
+      >
         <div className="sidebar__brand">
           <span className="brand-mark">Z</span>
           <div>
