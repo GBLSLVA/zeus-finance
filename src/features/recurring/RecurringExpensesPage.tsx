@@ -70,7 +70,6 @@ export function RecurringExpensesPage({
             <span className="records-count">{recurringExpenses.length} {recurringExpenses.length === 1 ? 'item' : 'itens'}</span>
           </div>
 
-
           <div className="recurring-list" role="list" aria-label="Compromissos recorrentes">
             {recurringExpenses.map(entry => {
               const monthEntry = dashboard.recurringExpenses.find(item => item.id === entry.id)
