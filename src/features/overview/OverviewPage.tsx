@@ -100,6 +100,24 @@ export function OverviewPage({
               />
             </section>
 
+            <section className="dashboard-actions" aria-label="Ações rápidas">
+              <div className="dashboard-actions__intro">
+                <span className="dashboard-actions__eyebrow">SEU PRÓXIMO PASSO</span>
+                <strong>Organize o mês em poucos cliques.</strong>
+              </div>
+              <div className="dashboard-actions__buttons">
+                <button type="button" className="dashboard-actions__primary" onClick={() => navigate('transactions')}>
+                  <Icon name="plus" size={18} /> Registrar gasto
+                </button>
+                <button type="button" className="dashboard-actions__secondary" onClick={() => navigate('budgets')}>
+                  <Icon name="budget" size={18} /> Ver orçamentos
+                </button>
+                <button type="button" className="dashboard-actions__secondary" onClick={() => navigate('goals')}>
+                  <Icon name="goal" size={18} /> Acompanhar metas
+                </button>
+              </div>
+            </section>
+
             <ZeusAssistantPanel
               monthLabel={monthLabel}
               answer={assistantAnswer}
