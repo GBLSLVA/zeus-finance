@@ -1,0 +1,565 @@
+/*
+ * ZEUS layout rhythm — shared 4px spacing scale and feature layouts.
+ * Imported after experience.css. Keep layout concerns here instead of
+ * appending scattered overrides to the legacy global stylesheet.
+ */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --content-gap: var(--space-6);
+  --section-gap: var(--space-6);
+  --panel-pad: var(--space-6);
+}
+
+/* Consistent page, section and form alignment throughout the product. */
+.workspace {
+  padding: var(--space-8) clamp(var(--space-5), 3.4vw, 48px) 88px;
+}
+
+.page-header {
+  min-height: 0;
+  margin-bottom: var(--space-6);
+  gap: var(--space-5);
+}
+
+.page-header:has(+ .period-toolbar) {
+  margin-bottom: var(--space-3);
+}
+
+.period-toolbar {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 var(--section-gap);
+}
+
+.dashboard,
+.budget-page,
+.debt-page,
+.goal-page,
+.recurring-page {
+  gap: var(--section-gap);
+}
+
+.records-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(310px, 360px);
+  gap: var(--content-gap);
+  align-items: start;
+}
+
+.records-layout > *,
+.panel {
+  min-width: 0;
+}
+
+.records-panel {
+  min-height: 0;
+}
+
+.records-panel__header {
+  min-height: 0;
+  padding: var(--space-6);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  column-gap: var(--space-4);
+  row-gap: var(--space-3);
+}
+
+.records-panel__header > div {
+  min-width: 0;
+  flex: 1 1 160px;
+}
+
+.records-count {
+  flex: none;
+  white-space: nowrap;
+}
+
+.record-form-panel {
+  top: var(--space-6);
+  padding: var(--panel-pad);
+}
+
+.record-form-panel > p {
+  margin: var(--space-3) 0 var(--space-6);
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+.record-form-panel form {
+  gap: var(--space-4);
+}
+
+.record-form-panel label {
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.record-form-panel input,
+.record-form-panel select {
+  min-width: 0;
+}
+
+.form-grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.form-actions { gap: var(--space-3); }
+
+.form-security {
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+}
+
+.table-wrap { max-width: 100%; }
+
+.budget-summary-grid,
+.debt-summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.budget-category-grid {
+  gap: var(--space-4);
+}
+
+.budget-category-card__numbers,
+.debt-card__values,
+.income-summary-strip,
+.budget-overview__summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.budget-category-card__numbers > div,
+.debt-card__values > div,
+.income-summary-strip > div,
+.budget-overview__summary > div {
+  min-width: 0;
+}
+
+.budget-category-card__numbers strong,
+.debt-card__values strong,
+.income-summary-strip strong,
+.budget-overview__summary strong {
+  overflow-wrap: anywhere;
+}
+
+.payments-panel { margin-top: var(--section-gap); }
+
+/* Categories: identity, color and actions have clear and predictable rows. */
+.categories-page .records-panel,
+.categories-page .record-form-panel {
+  min-height: 0;
+}
+
+.category-manager-list {
+  display: grid;
+  padding: var(--space-2) var(--space-4);
+}
+
+.category-manager-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  column-gap: var(--space-4);
+  row-gap: var(--space-3);
+  align-items: end;
+  padding: var(--space-5) var(--space-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.category-manager-row:last-child { border-bottom: 0; }
+
+.category-manager-identity {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.category-manager-swatch {
+  width: 12px;
+  height: 12px;
+  align-self: center;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, .035);
+}
+
+.category-manager-row label {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.category-manager-row label > span,
+.category-color-picker small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.category-manager-row input[name="name"] {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #0c151d;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.category-manager-row input[name="name"]:focus-visible {
+  border-color: var(--accent);
+}
+
+.category-color-field {
+  min-width: 0;
+}
+
+.category-color-field input[type="color"],
+.category-color-picker input[type="color"] {
+  width: 100%;
+  min-height: 46px;
+  height: 46px;
+  padding: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.category-manager-footer {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.category-manager-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.category-default-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.category-manager-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  gap: var(--space-2);
+}
+
+.category-manager-actions .secondary-button,
+.category-manager-actions .icon-action {
+  min-height: 44px;
+}
+
+.category-color-picker {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.category-color-picker small {
+  line-height: 1.5;
+}
+
+.category-empty {
+  min-height: 200px;
+  margin: var(--space-4);
+}
+
+/* Recurrences: a self-contained list replaces the 600px-wide table. */
+.recurring-page .budget-summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.recurring-page .budget-summary-grid .metric-card {
+  min-width: 0;
+  min-height: 150px;
+}
+
+.recurring-list {
+  display: grid;
+  padding: var(--space-2) var(--space-4);
+}
+
+.recurring-item {
+  min-width: 0;
+  padding: var(--space-5) var(--space-2);
+  display: grid;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.recurring-item:last-child { border-bottom: 0; }
+
+.recurring-item__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.recurring-item__top .record-name {
+  min-width: 0;
+  gap: var(--space-3);
+  flex: 1 1 auto;
+}
+
+.recurring-item__top .record-name > div {
+  min-width: 0;
+}
+
+.recurring-item__top .record-name strong {
+  display: block;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.recurring-item__top .record-name span {
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.recurring-state {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.recurring-state--paid {
+  border-color: rgba(100, 227, 176, .22);
+  color: var(--accent);
+  background: rgba(100, 227, 176, .07);
+}
+
+.recurring-state--pending {
+  border-color: rgba(241, 201, 107, .23);
+  color: var(--gold);
+  background: rgba(241, 201, 107, .07);
+}
+
+.recurring-item__details {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, .65fr) minmax(0, 1.4fr);
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .025);
+}
+
+.recurring-item__details > div {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+}
+
+.recurring-item__details span {
+  color: var(--subtle);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.recurring-item__details strong {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.recurring-item__details .recurring-item__amount {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
+}
+
+.recurring-item__actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.recurring-item__hint {
+  color: var(--subtle);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.recurring-item__actions .table-actions {
+  margin-left: auto;
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+}
+
+.recurring-pay-button {
+  min-height: 44px;
+  padding: 10px 13px;
+  font-size: 12px;
+  white-space: normal;
+}
+
+.recurring-empty {
+  min-height: 200px;
+  border: 0;
+}
+
+.recurring-page .form-grid-2 { grid-template-columns: minmax(0, 1fr); }
+
+@media (max-width: 1320px) {
+  .records-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .record-form-panel {
+    position: static;
+  }
+
+  .record-form-panel form,
+  .record-form-panel > p {
+    max-width: 660px;
+  }
+
+  .recurring-item__details {
+    grid-template-columns: minmax(0, 1fr) minmax(0, .65fr) minmax(0, 1.2fr);
+  }
+}
+
+@media (max-width: 980px) {
+  .budget-summary-grid,
+  .debt-summary-grid,
+  .recurring-page .budget-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .budget-summary-grid > :last-child,
+  .debt-summary-grid > :last-child,
+  .recurring-page .budget-summary-grid > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 940px) {
+  .workspace {
+    padding: var(--space-6) var(--space-5) calc(110px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --panel-pad: var(--space-4);
+    --content-gap: var(--space-4);
+    --section-gap: var(--space-4);
+  }
+
+  .workspace {
+    padding: var(--space-5) var(--space-4) calc(116px + env(safe-area-inset-bottom));
+  }
+
+  .page-header { margin-bottom: var(--space-5); }
+  .page-header:has(+ .period-toolbar) { margin-bottom: var(--space-3); }
+  .period-toolbar { margin-bottom: var(--space-5); }
+
+  .records-panel__header {
+    padding: var(--space-4);
+    gap: var(--space-3);
+  }
+
+  .records-panel__header > div { flex-basis: 130px; }
+
+  .budget-summary-grid,
+  .debt-summary-grid,
+  .recurring-page .budget-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .budget-summary-grid > :last-child,
+  .debt-summary-grid > :last-child,
+  .recurring-page .budget-summary-grid > :last-child {
+    grid-column: auto;
+  }
+
+  .category-manager-list,
+  .recurring-list { padding: 0 var(--space-3); }
+
+  .category-manager-row,
+  .recurring-item {
+    padding: var(--space-4) 0;
+  }
+
+  .category-manager-row { gap: var(--space-3); }
+
+  .category-manager-identity { gap: var(--space-2); }
+
+  .recurring-item__top { flex-wrap: wrap; gap: var(--space-3); }
+  .recurring-state { margin-left: 46px; }
+
+  .recurring-item__details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4);
+    padding: var(--space-3);
+  }
+
+  .recurring-item__details > :last-child { grid-column: 1 / -1; }
+
+  .recurring-item__actions { align-items: center; }
+  .recurring-item__hint { max-width: 190px; }
+
+  .budget-category-card__numbers,
+  .debt-card__values,
+  .income-summary-strip,
+  .budget-overview__summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 380px) {
+  .category-manager-row {
+    grid-template-columns: minmax(0, 1fr) 66px;
+  }
+
+  .category-manager-actions .secondary-button { padding-inline: 10px; }
+  .recurring-item__details { grid-template-columns: minmax(0, 1fr); }
+  .recurring-item__details > :last-child { grid-column: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recurring-item, .category-manager-row { scroll-behavior: auto; }
+}

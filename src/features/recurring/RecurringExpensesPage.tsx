@@ -61,8 +61,8 @@ export function RecurringExpensesPage({
         />
       </section>
 
-      <div className="records-layout">
-        <section className="panel records-panel">
+      <div className="records-layout recurring-records-layout">
+        <section className="panel records-panel recurring-records-panel">
           <div className="panel__header records-panel__header">
             <div>
               <h2>Gastos recorrentes</h2>
@@ -70,67 +70,93 @@ export function RecurringExpensesPage({
             <span className="records-count">{recurringExpenses.length} {recurringExpenses.length === 1 ? 'item' : 'itens'}</span>
           </div>
 
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Descrição</th><th>Vencimento / vigência</th><th>Status no mês</th><th>Valor</th><th className="table-action">Ação</th></tr>
-              </thead>
-              <tbody>
-                {recurringExpenses.map(entry => {
-                  const monthEntry = dashboard.recurringExpenses.find(item => item.id === entry.id)
-                  return (
-                    <tr key={entry.id}>
-                      <td>
-                        <div className="record-name">
-                          <span className="record-icon record-icon--transactions"><Icon name="calendar" size={17} /></span>
-                          <div>
-                            <strong>{entry.name}</strong>
-                            <span>{entry.category} • {entry.active ? 'Ativo' : 'Inativo'}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <strong>Dia {entry.dueDay}</strong>
-                        <small className="income-date">
-                          {new Date(entry.activeFrom + 'T12:00:00').toLocaleDateString('pt-BR')} → {entry.activeUntil ? new Date(entry.activeUntil + 'T12:00:00').toLocaleDateString('pt-BR') : 'atual'}
-                        </small>
-                      </td>
-                      <td>
-                        {monthEntry?.paid ? (
-                          <span className="debt-status debt-status--paid">Pago</span>
-                        ) : monthEntry ? (
-                          <button className="secondary-button recurring-pay-button" disabled={busy} onClick={() => onMarkPaid(entry.id)}>
-                            Marcar como pago
-                          </button>
-                        ) : (
-                          <span className="debt-status">Fora da vigência</span>
-                        )}
-                      </td>
-                      <td><strong className="table-value">{money(entry.value)}</strong></td>
-                      <td className="table-action">
-                        <div className="table-actions">
-                          <button className="icon-action" disabled={busy} onClick={() => onEdit(entry)} aria-label={`Editar ${entry.name}`}>
-                            <Icon name="edit" size={17} />
-                          </button>
-                          <button className="icon-action icon-action--danger" disabled={busy} onClick={() => onRemove(entry.id)} aria-label={`Excluir ${entry.name}`}>
-                            <Icon name="trash" size={17} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-                {!recurringExpenses.length && (
-                  <tr>
-                    <td colSpan={5} className="table-empty">
-                      <div className="empty-block__icon"><Icon name="calendar" size={22} /></div>
-                      <strong>Nenhum gasto recorrente cadastrado.</strong>
-                      <span>Cadastre aluguel, internet, academia, assinaturas e outros compromissos mensais.</span>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="recurring-list" role="list" aria-label="Compromissos recorrentes">
+            {recurringExpenses.map(entry => {
+              const monthEntry = dashboard.recurringExpenses.find(item => item.id === entry.id)
+              const status = monthEntry?.paid ? 'paid' : monthEntry ? 'pending' : 'outside'
+              return (
+                <article className="recurring-item" role="listitem" key={entry.id}>
+                  <div className="recurring-item__top">
+                    <div className="record-name">
+                      <span className="record-icon record-icon--transactions">
+                        <Icon name="calendar" size={18} />
+                      </span>
+                      <div>
+                        <strong>{entry.name}</strong>
+                        <span>{entry.category} · {entry.active ? 'Ativo' : 'Inativo'}</span>
+                      </div>
+                    </div>
+                    <span className={`recurring-state recurring-state--${status}`}>
+                      {status === 'paid' ? 'Pago no mês' : status === 'pending' ? 'Pendente' : 'Fora da vigência'}
+                    </span>
+                  </div>
+
+                  <div className="recurring-item__details">
+                    <div>
+                      <span>Valor mensal</span>
+                      <strong className="recurring-item__amount">{money(entry.value)}</strong>
+                    </div>
+                    <div>
+                      <span>Vencimento</span>
+                      <strong>Dia {entry.dueDay}</strong>
+                    </div>
+                    <div>
+                      <span>Período ativo</span>
+                      <strong>
+                        {new Date(entry.activeFrom + 'T12:00:00').toLocaleDateString('pt-BR')} até{' '}
+                        {entry.activeUntil
+                          ? new Date(entry.activeUntil + 'T12:00:00').toLocaleDateString('pt-BR')
+                          : 'atualmente'}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <div className="recurring-item__actions">
+                    {status === 'pending' ? (
+                      <button
+                        type="button"
+                        className="secondary-button recurring-pay-button"
+                        disabled={busy}
+                        onClick={() => onMarkPaid(entry.id)}
+                      >
+                        Marcar como pago
+                      </button>
+                    ) : (
+                      <span className="recurring-item__hint">
+                        {status === 'paid' ? 'Compromisso registrado neste mês' : 'Sem cobrança neste período'}
+                      </span>
+                    )}
+                    <div className="table-actions">
+                      <button
+                        type="button"
+                        className="icon-action"
+                        disabled={busy}
+                        onClick={() => onEdit(entry)}
+                        aria-label={`Editar ${entry.name}`}
+                      >
+                        <Icon name="edit" size={17} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-action icon-action--danger"
+                        disabled={busy}
+                        onClick={() => onRemove(entry.id)}
+                        aria-label={`Excluir ${entry.name}`}
+                      >
+                        <Icon name="trash" size={17} />
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              )
+            })}
+            {!recurringExpenses.length && (
+              <div className="table-empty recurring-empty">
+                <div className="empty-block__icon"><Icon name="calendar" size={22} /></div>
+                <strong>Nenhum gasto recorrente cadastrado.</strong>
+                <span>Adicione aluguel, internet, assinaturas ou outros compromissos mensais.</span>
+              </div>
+            )}
           </div>
         </section>
 
