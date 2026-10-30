@@ -2,6 +2,7 @@ import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import { api } from './api'
 import { buildFinanceCsv, type FinanceBackup } from './utils/csv'
 import { Icon } from './components/Icon'
+import { useStaggeredReveal } from './hooks/useStaggeredReveal'
 import { RecurringExpensesPage } from './features/recurring/RecurringExpensesPage'
 import { CategoriesPage } from './features/categories/CategoriesPage'
 import { BudgetPage } from './features/budgets/BudgetPage'
@@ -118,6 +119,7 @@ export function App() {
   const [assistantAnswer, setAssistantAnswer] = useState<AssistantResponse | null>(null)
   const [assistantBusy, setAssistantBusy] = useState(false)
   const [dashboard, setDashboard] = useState<Dashboard>(() => emptyDashboard(currentMonthKey()))
+  const workspaceRef = useStaggeredReveal(view, Boolean(user) && !loading && recoveryMode === 'none')
 
   const load = async () => {
     const [transactions, debts, goals, incomeEntries, recurringEntries, categoryEntries] = await Promise.all([
@@ -1032,6 +1034,21 @@ export function App() {
 
   const monthLabel = formatMonth(selectedMonth)
 
+  useEffect(() => {
+    document.title = user && recoveryMode === 'none'
+      ? `${titles[view]} — ZEUS Finance`
+      : 'ZEUS Finance — Monitoramento financeiro'
+  }, [view, user, recoveryMode])
+
+  useEffect(() => {
+    if (!menu) return
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenu(false)
+    }
+    window.addEventListener('keydown', onEscape)
+    return () => window.removeEventListener('keydown', onEscape)
+  }, [menu])
+
   const navigate = (next: View) => {
     setView(next)
     setMenu(false)
@@ -1207,6 +1224,7 @@ export function App() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">Pular para o conteúdo</a>
       {menu && <button className="nav-backdrop" aria-label="Fechar menu" onClick={() => setMenu(false)} />}
 
       <aside id="navigation" className={`sidebar ${menu ? 'open' : ''}`}>
@@ -1311,7 +1329,7 @@ export function App() {
         </div>
       </aside>
 
-      <main className="workspace">
+      <main id="main-content" ref={workspaceRef} className="workspace" tabIndex={-1}>
         <header className="page-header">
           <div className="page-header__left">
             <button
