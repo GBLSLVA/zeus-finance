@@ -35,17 +35,19 @@ export function CategoriesPage({
               key={category.id}
               onSubmit={event => onUpdate(event,category)}
             >
-              <span className="category-manager-swatch" style={{ background: category.color }} />
-              <label>
-                <span>Nome</span>
-                <input
-                  name="name"
-                  defaultValue={category.name}
-                  maxLength={60}
-                  required
-                  aria-label={`Nome da categoria ${category.name}`}
-                />
-              </label>
+              <div className="category-manager-identity">
+                <span className="category-manager-swatch" style={{ background: category.color }} aria-hidden="true" />
+                <label>
+                  <span>Nome</span>
+                  <input
+                    name="name"
+                    defaultValue={category.name}
+                    maxLength={60}
+                    required
+                    aria-label={`Nome da categoria ${category.name}`}
+                  />
+                </label>
+              </div>
               <label className="category-color-field">
                 <span>Cor</span>
                 <input
@@ -55,10 +57,11 @@ export function CategoriesPage({
                   aria-label={`Cor da categoria ${category.name}`}
                 />
               </label>
-              <div className="category-manager-meta">
-                {category.isDefault && <span className="category-default-badge">Inicial</span>}
-              </div>
-              <div className="category-manager-actions">
+              <div className="category-manager-footer">
+                <div className="category-manager-meta">
+                  {category.isDefault && <span className="category-default-badge">Inicial</span>}
+                </div>
+                <div className="category-manager-actions">
                 <button className="secondary-button" disabled={busy} type="submit">
                   <Icon name="edit" size={16} />
                   Salvar
@@ -73,6 +76,7 @@ export function CategoriesPage({
                   <Icon name="trash" size={17} />
                 </button>
               </div>
+              </div>
             </form>
           ))}
         </div>
@@ -81,7 +85,7 @@ export function CategoriesPage({
           <div className="table-empty category-empty">
             <div className="empty-block__icon"><Icon name="tag" size={22} /></div>
             <strong>Nenhuma categoria disponível.</strong>
-            <span>Crie uma categoria no formulário ao lado.</span>
+            <span>Use o formulário de criação para organizar seus lançamentos.</span>
           </div>
         )}
       </section>
@@ -92,7 +96,7 @@ export function CategoriesPage({
         <p>Crie grupos que façam sentido para sua rotina. A cor será usada nos gráficos e orçamentos.</p>
         <form onSubmit={onAdd}>
           <label>
-            <span>Nome</span>
+            <span>Nome da categoria</span>
             <input name="name" placeholder="Ex.: Pets, Saúde, Estudos" required maxLength={60} />
           </label>
           <label>
