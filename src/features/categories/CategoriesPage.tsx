@@ -62,20 +62,20 @@ export function CategoriesPage({
                   {category.isDefault && <span className="category-default-badge">Inicial</span>}
                 </div>
                 <div className="category-manager-actions">
-                <button className="secondary-button" disabled={busy} type="submit">
+                  <button className="secondary-button" disabled={busy} type="submit">
                   <Icon name="edit" size={16} />
                   Salvar
-                </button>
-                <button
-                  className="icon-action icon-action--danger"
+                  </button>
+                  <button
+                    className="icon-action icon-action--danger"
                   disabled={busy}
                   type="button"
                   onClick={() => onRemove(category.id)}
-                  aria-label={`Excluir categoria ${category.name}`}
-                >
-                  <Icon name="trash" size={17} />
-                </button>
-              </div>
+                    aria-label={`Excluir categoria ${category.name}`}
+                  >
+                    <Icon name="trash" size={17} />
+                  </button>
+                </div>
               </div>
             </form>
           ))}
